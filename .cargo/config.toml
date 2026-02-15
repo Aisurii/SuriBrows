@@ -1,0 +1,18 @@
+# Cargo configuration for SuriBrows
+
+# Windows Security Hardening: Control Flow Guard (CFG)
+# CFG is a security mitigation that validates indirect call targets at runtime.
+# This prevents Return-Oriented Programming (ROP) and Jump-Oriented Programming (JOP) attacks.
+#
+# How it works:
+# - The compiler instruments all indirect calls (function pointers, vtable calls)
+# - At runtime, Windows validates the target address before jumping
+# - If the target is invalid (e.g., ROP gadget), the process crashes safely
+#
+# Performance impact: ~2-5% overhead on indirect calls only
+# Compatibility: Requires Windows 8.1+ (all modern Windows versions)
+#
+# Reference: https://doc.rust-lang.org/beta/unstable-book/compiler-flags/control-flow-guard.html
+
+[target.'cfg(windows)']
+rustflags = ["-C", "control-flow-guard"]

@@ -1,0 +1,115 @@
+[package]
+name = "suribrows"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.91.0"
+description = "SuriBrows — Navigateur privacy-first construit sur Servo"
+
+# ─── Servo engine ────────────────────────────────────────────────────────
+# Servo n'est PAS publié sur crates.io. On pointe vers le dépôt git,
+# épinglé au tag v0.0.4 pour la stabilité de l'API.
+# Le crate s'appelle "libservo" mais la lib est exposée comme "servo".
+# Sur Windows, WebXR (activé par défaut) force surfman en mode EGL/ANGLE.
+# Le feature "no-wgl" fait que mozangle compile les DLLs ANGLE nécessaires
+# (libEGL.dll, libGLESv2.dll) au lieu de tenter un chargement dynamique.
+[dependencies.libservo]
+git = "https://github.com/servo/servo.git"
+rev = "b73ae025690cce16185520ea88a6df162fc1298d"
+features = ["no-wgl"]
+
+# ─── Servo internal crates ───────────────────────────────────────────────
+# embedder_traits contient le trait EventLoopWaker, nécessaire pour
+# ponter les threads Servo vers la boucle Winit.
+[dependencies.embedder_traits]
+git = "https://github.com/servo/servo.git"
+rev = "b73ae025690cce16185520ea88a6df162fc1298d"
+
+# WebRender API fournit les types de coordonnées (DevicePixel, DevicePoint).
+# Doit correspondre à la révision utilisée par Servo v0.0.4.
+[dependencies.webrender_api]
+git = "https://github.com/servo/webrender"
+rev = "6cafc606096db4715a6119a6e16391aed9af47a5"
+
+# ─── Windowing ───────────────────────────────────────────────────────────
+# Winit 0.30 : architecture trait-based (ApplicationHandler).
+# Version alignée sur celle utilisée internement par Servo.
+[dependencies.winit]
+version = "0.30.12"
+
+# ─── Types géométriques ─────────────────────────────────────────────────
+[dependencies.euclid]
+version = "0.22"
+
+# ─── URL parsing ─────────────────────────────────────────────────────────
+[dependencies.url]
+version = "2"
+
+# ─── Logging / Tracing ──────────────────────────────────────────────────
+[dependencies.tracing]
+version = "0.1"
+
+[dependencies.tracing-subscriber]
+version = "0.3"
+features = ["env-filter"]
+
+# ─── TLS crypto provider ────────────────────────────────────────────────
+# Servo utilise rustls. Un provider crypto doit être installé AVANT
+# toute opération TLS. aws-lc-rs est le backend recommandé.
+[dependencies.rustls]
+version = "0.23"
+features = ["aws-lc-rs"]
+
+# ─── Ad-blocking ───────────────────────────────────────────────────────
+# Moteur de filtrage réseau de Brave (format Adblock Plus).
+# Utilisé pour bloquer les trackers et publicités via WebViewDelegate.
+[dependencies.adblock]
+version = "0.9"
+default-features = false
+features = ["embedded-domain-resolver"]
+
+# Pin rmp to 0.8.14 — rmp 0.8.15 removed public API that rmp-serde 0.15.5
+# (used by adblock) still depends on.
+[dependencies.rmp]
+version = "=0.8.14"
+
+# ─── GL bindings ──────────────────────────────────────────────────────
+# Même version que Servo (0.16.0), déjà dans Cargo.lock.
+# Utilisé pour le rendu du chrome navigateur (barre d'URL).
+[dependencies.glow]
+version = "0.16.0"
+
+# ─── Font rasterization ──────────────────────────────────────────────
+# Rastériseur CPU de polices — pure Rust, zéro dépendances lourdes.
+# Utilisé pour le rendu du texte dans la barre d'URL.
+[dependencies.fontdue]
+version = "0.9"
+
+# ─── Windows Security APIs ──────────────────────────────────────────
+# Bindings FFI pour les APIs de sécurité Windows (SetProcessMitigationPolicy, Job Objects).
+# Utilisé uniquement sur Windows pour les mitigations de processus (ACG, Image Load, Job Object).
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_JobObjects",
+]
+
+# ─── Feature flags pour l'avenir ─────────────────────────────────────────
+[features]
+default = []
+# privacy    = []  # Ad-blocking (crate adblock), tracker blocking
+# wgpu-ui    = []  # Overlay GPU pour la barre d'adresse et onglets
+# wasm-plugins = []  # Système de plugins WebAssembly (wasmtime)
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1   # Better cross-crate optimization (slower compile, faster runtime)
+strip = true        # Strip debug symbols — smaller binary
+panic = "abort"     # No unwinding overhead — smaller + slightly faster
+
+# ── Windows Security Hardening ─────────────────────────────────────────
+# Control Flow Guard (CFG) is enabled via .cargo/config.toml (see that file)
+# CFG validates indirect call targets to prevent ROP/JOP attacks
+# Performance overhead: ~2-5% on indirect calls only
