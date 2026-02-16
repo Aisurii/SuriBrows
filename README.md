@@ -2300,7 +2300,7 @@ time cargo run --release -- https://example.com
 
 ## **LICENSE**
 
-*[To be determined - add your license here]*
+*[To be determined]*
 
 ---
 
@@ -2316,10 +2316,5 @@ time cargo run --release -- https://example.com
 
 ## **CONTACT & SUPPORT**
 
-*[Add contact information or issue tracker here]*
+[*\[My KO-FI\]*](https://ko-fi.com/aisuurii)
 
----
-
-**Built with ❤️ and Rust**
-
-*SuriBrows — Browse the web, privately.*

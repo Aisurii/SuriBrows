@@ -36,13 +36,9 @@ impl resources::ResourceReaderMethods for ResourceReader {
 
         // SECURITY: Prevent path traversal attacks (V-2)
         // Canonicalize resolves symlinks and "../" sequences to absolute paths
-        let canonical = path.canonicalize().unwrap_or_else(|e| {
-            panic!(
-                "Invalid resource path '{}': {}",
-                file.filename(),
-                e
-            )
-        });
+        let canonical = path
+            .canonicalize()
+            .unwrap_or_else(|e| panic!("Invalid resource path '{}': {}", file.filename(), e));
 
         let resources_canonical = resources_dir_path()
             .canonicalize()
@@ -150,7 +146,8 @@ mod tests {
         // prevents path traversal attacks at the directory level
 
         let resources_dir = resources_dir_path();
-        let resources_canonical = resources_dir.canonicalize()
+        let resources_canonical = resources_dir
+            .canonicalize()
             .expect("Resources directory should exist");
 
         // Simulate what would happen with a malicious path
@@ -190,7 +187,8 @@ mod tests {
         );
 
         // Verify we can canonicalize it (no symlink attacks)
-        let canonical = resources_dir.canonicalize()
+        let canonical = resources_dir
+            .canonicalize()
             .expect("Should be able to canonicalize resources directory");
 
         assert!(
@@ -264,8 +262,8 @@ mod tests {
                 // If the path exists and canonicalizes, make sure our security check works
                 if canonical != resources_canonical {
                     assert!(
-                        !canonical.starts_with(&resources_canonical) ||
-                        canonical == resources_canonical,
+                        !canonical.starts_with(&resources_canonical)
+                            || canonical == resources_canonical,
                         "Pattern '{}' bypassed security: {} vs {}",
                         pattern,
                         canonical.display(),

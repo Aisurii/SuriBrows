@@ -120,15 +120,18 @@ impl GlyphAtlas {
 
             row_height = row_height.max(h);
 
-            glyphs.insert(c, GlyphInfo {
-                atlas_x: x,
-                atlas_y: y,
-                width: w,
-                height: h,
-                advance_x: metrics.advance_width,
-                offset_x: metrics.xmin as f32,
-                offset_y: metrics.ymin as f32,
-            });
+            glyphs.insert(
+                c,
+                GlyphInfo {
+                    atlas_x: x,
+                    atlas_y: y,
+                    width: w,
+                    height: h,
+                    advance_x: metrics.advance_width,
+                    offset_x: metrics.xmin as f32,
+                    offset_y: metrics.ymin as f32,
+                },
+            );
 
             x += w + 1;
         }
@@ -225,25 +228,46 @@ impl ChromeRenderer {
         gl.vertex_attrib_pointer_f32(0, 2, glow::FLOAT, false, stride, 0);
         gl.enable_vertex_attrib_array(0);
         // uv (location = 1)
-        gl.vertex_attrib_pointer_f32(1, 2, glow::FLOAT, false, stride, 2 * std::mem::size_of::<f32>() as i32);
+        gl.vertex_attrib_pointer_f32(
+            1,
+            2,
+            glow::FLOAT,
+            false,
+            stride,
+            2 * std::mem::size_of::<f32>() as i32,
+        );
         gl.enable_vertex_attrib_array(1);
 
         gl.bind_vertex_array(None);
 
         // ── Atlas de glyphes ─────────────────────────────────────────────
-        let font = fontdue::Font::from_bytes(
-            FONT_BYTES,
-            fontdue::FontSettings::default(),
-        ).expect("Impossible de charger la police Inter");
+        let font = fontdue::Font::from_bytes(FONT_BYTES, fontdue::FontSettings::default())
+            .expect("Impossible de charger la police Inter");
 
         let atlas = GlyphAtlas::build(&font);
 
         let atlas_texture = gl.create_texture().unwrap();
         gl.bind_texture(glow::TEXTURE_2D, Some(atlas_texture));
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MIN_FILTER, glow::LINEAR as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_MAG_FILTER, glow::LINEAR as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::CLAMP_TO_EDGE as i32);
-        gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::CLAMP_TO_EDGE as i32);
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MIN_FILTER,
+            glow::LINEAR as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_MAG_FILTER,
+            glow::LINEAR as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_S,
+            glow::CLAMP_TO_EDGE as i32,
+        );
+        gl.tex_parameter_i32(
+            glow::TEXTURE_2D,
+            glow::TEXTURE_WRAP_T,
+            glow::CLAMP_TO_EDGE as i32,
+        );
         gl.pixel_store_i32(glow::UNPACK_ALIGNMENT, 1);
         gl.tex_image_2d(
             glow::TEXTURE_2D,
@@ -319,7 +343,11 @@ impl ChromeRenderer {
         gl.bind_vertex_array(Some(self.vao));
 
         // ── 1. Fond du chrome ────────────────────────────────────────────
-        let bg = if is_focused { BG_FOCUSED_COLOR } else { BG_COLOR };
+        let bg = if is_focused {
+            BG_FOCUSED_COLOR
+        } else {
+            BG_COLOR
+        };
         self.draw_rect(0.0, 0.0, w, ch, bg);
 
         // ── 2. Barre de saisie (input field) ─────────────────────────────
@@ -331,7 +359,13 @@ impl ChromeRenderer {
         // Bordure
         self.draw_rect(bar_x, bar_y, bar_w, bar_h, BAR_BORDER_COLOR);
         // Fond intérieur
-        self.draw_rect(bar_x + 1.0, bar_y + 1.0, bar_w - 2.0, bar_h - 2.0, BAR_BG_COLOR);
+        self.draw_rect(
+            bar_x + 1.0,
+            bar_y + 1.0,
+            bar_w - 2.0,
+            bar_h - 2.0,
+            BAR_BG_COLOR,
+        );
 
         // ── 3. Texte de l'URL ────────────────────────────────────────────
         let text_x = bar_x + BAR_H_PAD + TEXT_LEFT_PAD;
@@ -363,10 +397,14 @@ impl ChromeRenderer {
                     let gy = text_baseline_y - glyph.offset_y - glyph.height as f32;
 
                     self.draw_textured_rect(
-                        gx, gy,
-                        glyph.width as f32, glyph.height as f32,
-                        glyph.atlas_x, glyph.atlas_y,
-                        glyph.width, glyph.height,
+                        gx,
+                        gy,
+                        glyph.width as f32,
+                        glyph.height as f32,
+                        glyph.atlas_x,
+                        glyph.atlas_y,
+                        glyph.width,
+                        glyph.height,
                     );
                 }
                 pen_x += glyph.advance_x;
@@ -439,10 +477,14 @@ impl ChromeRenderer {
     /// Dessine un rectangle texturé depuis l'atlas de glyphes.
     unsafe fn draw_textured_rect(
         &self,
-        x: f32, y: f32,
-        w: f32, h: f32,
-        atlas_x: u32, atlas_y: u32,
-        atlas_w: u32, atlas_h: u32,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        atlas_x: u32,
+        atlas_y: u32,
+        atlas_w: u32,
+        atlas_h: u32,
     ) {
         let gl = &self.gl;
         gl.uniform_1_i32(Some(&self.u_use_texture), 1);

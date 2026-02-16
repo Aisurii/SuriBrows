@@ -33,8 +33,9 @@ use std::ptr::null_mut;
 use windows_sys::Win32::Foundation::GetLastError;
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
-    SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+    SetInformationJobObject,
 };
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, SetProcessMitigationPolicy};
@@ -122,7 +123,7 @@ pub fn apply_process_mitigations(enable_acg: bool) {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = enable_acg; // Suppress unused variable warning
-                            // No-op on Linux/macOS
+        // No-op on Linux/macOS
     }
 }
 

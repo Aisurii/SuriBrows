@@ -44,20 +44,18 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use euclid::Scale;
+use servo::{InputEvent, WheelDelta, WheelEvent, WheelMode};
+use servo::{MouseButton as ServoMouseButton, MouseButtonAction, MouseButtonEvent};
+use servo::{MouseLeftViewportEvent, MouseMoveEvent};
 use servo::{
     OffscreenRenderingContext, RenderingContext, Servo, ServoBuilder, WebView, WebViewBuilder,
     WindowRenderingContext,
 };
-use servo::{InputEvent, WheelDelta, WheelEvent, WheelMode};
-use servo::{MouseButton as ServoMouseButton, MouseButtonAction, MouseButtonEvent};
-use servo::{MouseLeftViewportEvent, MouseMoveEvent};
 use url::Url;
 use webrender_api::units::DevicePoint;
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::{
-    ElementState, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent,
-};
+use winit::event::{ElementState, MouseButton as WinitMouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::EventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -124,10 +122,7 @@ pub struct AppState {
 /// Application à deux phases de vie.
 pub enum App {
     /// Phase pré-initialisation : on attend que Winit appelle `resumed()`.
-    Initial {
-        waker: Waker,
-        initial_url: Url,
-    },
+    Initial { waker: Waker, initial_url: Url },
 
     /// Phase opérationnelle : le navigateur est actif.
     Running(Rc<AppState>),
@@ -171,18 +166,18 @@ fn build_servo_preferences() -> servo::Preferences {
     prefs.user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string();
 
     // Network Security
-    prefs.network_enforce_tls_enabled = true;  // Force HTTPS where possible
-    prefs.network_mime_sniff = false;          // Disable MIME sniffing (prevents XSS)
+    prefs.network_enforce_tls_enabled = true; // Force HTTPS where possible
+    prefs.network_mime_sniff = false; // Disable MIME sniffing (prevents XSS)
 
     // Privacy Features - Disable Tracking APIs
-    prefs.dom_geolocation_enabled = false;     // Block location tracking
-    prefs.dom_bluetooth_enabled = false;       // Block Bluetooth access
-    prefs.dom_notification_enabled = false;    // Block notification spam
+    prefs.dom_geolocation_enabled = false; // Block location tracking
+    prefs.dom_bluetooth_enabled = false; // Block Bluetooth access
+    prefs.dom_notification_enabled = false; // Block notification spam
 
     // SECURITY: Disable WebRTC to prevent IP leak attacks
     // Trade-off: Breaks video calls (Zoom, Meet, Discord), P2P apps
     // Rationale: WebRTC can reveal local/public IP even through VPN via STUN
-    prefs.dom_webrtc_enabled = false;          // Block WebRTC IP leaks
+    prefs.dom_webrtc_enabled = false; // Block WebRTC IP leaks
 
     // Keep enabled for compatibility (balanced mode)
     // - dom_cookiestore_enabled: true (default) - needed for logins
@@ -325,11 +320,7 @@ impl ApplicationHandler<WakerEvent> for App {
     }
 
     /// Appelé quand un `WakerEvent` arrive depuis les threads Servo.
-    fn user_event(
-        &mut self,
-        _event_loop: &winit::event_loop::ActiveEventLoop,
-        _event: WakerEvent,
-    ) {
+    fn user_event(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, _event: WakerEvent) {
         if let Self::Running(state) = self {
             state.servo.spin_event_loop();
         }
@@ -353,7 +344,7 @@ impl ApplicationHandler<WakerEvent> for App {
             // ── Fermeture de la fenêtre ────────────────────────────────
             WindowEvent::CloseRequested => {
                 event_loop.exit();
-            },
+            }
 
             // ── Redraw : blit FBO + chrome ─────────────────────────────
             WindowEvent::RedrawRequested => {
@@ -402,7 +393,7 @@ impl ApplicationHandler<WakerEvent> for App {
                     // 4. Présenter
                     state.window_rendering_context.present();
                 }
-            },
+            }
 
             // ── Scroll souris ──────────────────────────────────────────
             WindowEvent::MouseWheel { delta, .. } => {
@@ -413,15 +404,11 @@ impl ApplicationHandler<WakerEvent> for App {
                         if let Some(webview) = state.webviews.borrow().last() {
                             let (delta_x, delta_y, mode) = match delta {
                                 MouseScrollDelta::LineDelta(dx, dy) => {
-                                    (
-                                        (dx * 76.0) as f64,
-                                        (dy * 76.0) as f64,
-                                        WheelMode::DeltaLine,
-                                    )
-                                },
+                                    ((dx * 76.0) as f64, (dy * 76.0) as f64, WheelMode::DeltaLine)
+                                }
                                 MouseScrollDelta::PixelDelta(delta) => {
                                     (delta.x, delta.y, WheelMode::DeltaPixel)
-                                },
+                                }
                             };
 
                             let adjusted = DevicePoint::new(pos.x, pos.y - chrome_h);
@@ -437,7 +424,7 @@ impl ApplicationHandler<WakerEvent> for App {
                         }
                     }
                 }
-            },
+            }
 
             // ── Redimensionnement de la fenêtre ────────────────────────
             WindowEvent::Resized(new_size) => {
@@ -448,14 +435,14 @@ impl ApplicationHandler<WakerEvent> for App {
                     let wv_size = webview_size(new_size);
                     state.offscreen_context.resize(wv_size);
                 }
-            },
+            }
 
             // ── Modificateurs clavier (Ctrl, Shift, Alt, Meta) ────────
             WindowEvent::ModifiersChanged(new_modifiers) => {
                 if let Self::Running(state) = self {
                     state.modifiers.set(new_modifiers.state());
                 }
-            },
+            }
 
             // ── Mouvement du curseur ──────────────────────────────────
             WindowEvent::CursorMoved { position, .. } => {
@@ -470,13 +457,13 @@ impl ApplicationHandler<WakerEvent> for App {
                             (position.y - chrome_h as f64) as f32,
                         );
                         if let Some(webview) = state.webviews.borrow().last() {
-                            webview.notify_input_event(InputEvent::MouseMove(
-                                MouseMoveEvent::new(adjusted.into()),
-                            ));
+                            webview.notify_input_event(InputEvent::MouseMove(MouseMoveEvent::new(
+                                adjusted.into(),
+                            )));
                         }
                     }
                 }
-            },
+            }
 
             // ── Curseur quitte la fenêtre ─────────────────────────────
             WindowEvent::CursorLeft { .. } => {
@@ -487,7 +474,7 @@ impl ApplicationHandler<WakerEvent> for App {
                         ));
                     }
                 }
-            },
+            }
 
             // ── Clics souris ──────────────────────────────────────────
             WindowEvent::MouseInput {
@@ -500,9 +487,7 @@ impl ApplicationHandler<WakerEvent> for App {
 
                     if pos.y < chrome_h {
                         // Clic dans la zone chrome → focus la barre d'URL
-                        if btn_state == ElementState::Pressed
-                            && button == WinitMouseButton::Left
-                        {
+                        if btn_state == ElementState::Pressed && button == WinitMouseButton::Left {
                             state.urlbar.borrow_mut().focus();
                             state.window.request_redraw();
                         }
@@ -536,7 +521,7 @@ impl ApplicationHandler<WakerEvent> for App {
                         }
                     }
                 }
-            },
+            }
 
             // ── Saisie clavier ────────────────────────────────────────
             WindowEvent::KeyboardInput { event, .. } => {
@@ -598,55 +583,49 @@ impl ApplicationHandler<WakerEvent> for App {
                     }
 
                     // ── URL bar focusée → consommer les touches ──────
-                    if state.urlbar.borrow().is_focused()
-                        && event.state == ElementState::Pressed
-                    {
+                    if state.urlbar.borrow().is_focused() && event.state == ElementState::Pressed {
                         let mut urlbar = state.urlbar.borrow_mut();
 
                         match &event.logical_key {
                             Key::Named(NamedKey::Enter) => {
                                 if let Some(url) = urlbar.submit() {
                                     drop(urlbar);
-                                    if let Some(webview) =
-                                        state.webviews.borrow().last()
-                                    {
+                                    if let Some(webview) = state.webviews.borrow().last() {
                                         webview.load(url);
                                     }
                                 }
-                            },
+                            }
                             Key::Named(NamedKey::Escape) => {
                                 urlbar.unfocus();
-                            },
+                            }
                             Key::Named(NamedKey::Backspace) => {
                                 urlbar.backspace();
-                            },
+                            }
                             Key::Named(NamedKey::Delete) => {
                                 urlbar.delete();
-                            },
+                            }
                             Key::Named(NamedKey::ArrowLeft) => {
                                 urlbar.move_cursor_left();
-                            },
+                            }
                             Key::Named(NamedKey::ArrowRight) => {
                                 urlbar.move_cursor_right();
-                            },
+                            }
                             Key::Named(NamedKey::Home) => {
                                 urlbar.home();
-                            },
+                            }
                             Key::Named(NamedKey::End) => {
                                 urlbar.end();
-                            },
+                            }
                             Key::Character(c) => {
-                                if mods.control_key()
-                                    && (c.as_str() == "a" || c.as_str() == "A")
-                                {
+                                if mods.control_key() && (c.as_str() == "a" || c.as_str() == "A") {
                                     urlbar.select_all();
                                 } else if !mods.control_key() && !mods.alt_key() {
                                     for ch in c.chars() {
                                         urlbar.insert_char(ch);
                                     }
                                 }
-                            },
-                            _ => {},
+                            }
+                            _ => {}
                         }
 
                         state.window.request_redraw();
@@ -655,15 +634,12 @@ impl ApplicationHandler<WakerEvent> for App {
 
                     // ── Passer à Servo (URL bar pas focusée) ─────────
                     if let Some(webview) = state.webviews.borrow().last() {
-                        let keyboard_event = crate::keyutils::keyboard_event_from_winit(
-                            &event,
-                            mods,
-                        );
-                        webview
-                            .notify_input_event(InputEvent::Keyboard(keyboard_event));
+                        let keyboard_event =
+                            crate::keyutils::keyboard_event_from_winit(&event, mods);
+                        webview.notify_input_event(InputEvent::Keyboard(keyboard_event));
                     }
                 }
-            },
+            }
 
             _ => (),
         }

@@ -20,8 +20,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use adblock::lists::{FilterSet, ParseOptions};
 use adblock::Engine;
+use adblock::lists::{FilterSet, ParseOptions};
 use tracing::{info, warn};
 
 /// Wrapper autour du moteur `adblock::Engine`.
@@ -47,11 +47,7 @@ impl AdblockEngine {
         let entries: Vec<_> = fs::read_dir(&filters_dir)
             .ok()?
             .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path()
-                    .extension()
-                    .is_some_and(|ext| ext == "txt")
-            })
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "txt"))
             .collect();
 
         if entries.is_empty() {
@@ -75,10 +71,10 @@ impl AdblockEngine {
                         path.display(),
                         line_count
                     );
-                },
+                }
                 Err(e) => {
                     warn!("Impossible de lire {} : {}", path.display(), e);
-                },
+                }
             }
         }
 
@@ -110,7 +106,7 @@ impl AdblockEngine {
                 // URL unparseable by adblock (data URI, blob, etc.) — allow it.
                 self.cache.borrow_mut().insert(key, false);
                 return false;
-            },
+            }
         };
         let blocked = self.engine.check_network_request(&request).matched;
         self.cache.borrow_mut().insert(key, blocked);

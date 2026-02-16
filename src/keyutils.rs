@@ -40,7 +40,7 @@ fn key_from_winit(key_event: &KeyEvent) -> Key {
         WinitKey::Character(ref string) => return Key::Character(string.to_string()),
         WinitKey::Unidentified(_) | WinitKey::Dead(_) => {
             return Key::Named(NamedKey::Unidentified);
-        },
+        }
     };
 
     match named_key {
@@ -312,9 +312,7 @@ fn key_from_winit(key_event: &KeyEvent) -> Key {
         WinitNamedKey::TV3DMode => Key::Named(NamedKey::TV3DMode),
         WinitNamedKey::TVAntennaCable => Key::Named(NamedKey::TVAntennaCable),
         WinitNamedKey::TVAudioDescription => Key::Named(NamedKey::TVAudioDescription),
-        WinitNamedKey::TVAudioDescriptionMixDown => {
-            Key::Named(NamedKey::TVAudioDescriptionMixDown)
-        },
+        WinitNamedKey::TVAudioDescriptionMixDown => Key::Named(NamedKey::TVAudioDescriptionMixDown),
         WinitNamedKey::TVAudioDescriptionMixUp => Key::Named(NamedKey::TVAudioDescriptionMixUp),
         WinitNamedKey::TVContentsMenu => Key::Named(NamedKey::TVContentsMenu),
         WinitNamedKey::TVDataService => Key::Named(NamedKey::TVDataService),

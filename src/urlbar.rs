@@ -44,12 +44,13 @@ fn normalize_url_for_display(url: &Url) -> String {
         .filter(|c| {
             !matches!(
                 *c,
-                '\u{200B}'..='\u{200D}' // Zero-width space, ZWNJ, ZWJ
+                '\u{200B}'
+                    ..='\u{200D}' // Zero-width space, ZWNJ, ZWJ
                 | '\u{2060}'            // Word joiner
                 | '\u{FEFF}'            // Zero-width no-break space (BOM)
                 | '\u{034F}'            // Combining grapheme joiner
                 | '\u{2028}'            // Line separator
-                | '\u{2029}'            // Paragraph separator
+                | '\u{2029}' // Paragraph separator
             )
         })
         .collect();
@@ -98,7 +99,7 @@ impl UrlBar {
     pub fn set_url(&mut self, url: &Url) {
         self.current_url = Some(url.clone());
         if self.focus == UrlBarFocus::Unfocused {
-            self.text = normalize_url_for_display(url);  // Security: normalized display
+            self.text = normalize_url_for_display(url); // Security: normalized display
             self.cursor = self.text.len();
         }
     }
@@ -115,7 +116,7 @@ impl UrlBar {
     pub fn unfocus(&mut self) {
         self.focus = UrlBarFocus::Unfocused;
         if let Some(ref url) = self.current_url {
-            self.text = normalize_url_for_display(url);  // Security: normalized display
+            self.text = normalize_url_for_display(url); // Security: normalized display
             self.cursor = self.text.len();
         }
     }
@@ -316,10 +317,12 @@ mod tests {
         let url = Url::parse("https://google.com/path?query=value").unwrap();
         let normalized = normalize_url_for_display(&url);
 
-        assert!(!normalized.contains("⚠️"), "Normal URL should not have warning");
+        assert!(
+            !normalized.contains("⚠️"),
+            "Normal URL should not have warning"
+        );
         assert_eq!(
-            normalized,
-            "https://google.com/path?query=value",
+            normalized, "https://google.com/path?query=value",
             "Normal URL should be unchanged"
         );
     }

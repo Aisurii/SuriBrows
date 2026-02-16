@@ -112,8 +112,7 @@ impl WebViewDelegate for AppState {
     /// access to Rc<RefCell<>> causes a panic across the FFI boundary.
     fn notify_url_changed(&self, _webview: WebView, url: Url) {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.window
-                .set_title(&format!("SuriBrows — {}", url));
+            self.window.set_title(&format!("SuriBrows — {}", url));
             self.urlbar.borrow_mut().set_url(&url);
             *self.current_url.borrow_mut() = Some(url.clone());
             if let Some(ref engine) = self.adblock_engine {
@@ -131,8 +130,7 @@ impl WebViewDelegate for AppState {
     fn notify_page_title_changed(&self, _webview: WebView, title: Option<String>) {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             if let Some(title) = title {
-                self.window
-                    .set_title(&format!("SuriBrows — {}", title));
+                self.window.set_title(&format!("SuriBrows — {}", title));
             }
         }));
         // Panic recovery: prevent UB if window access causes panic
@@ -158,12 +156,13 @@ impl WebViewDelegate for AppState {
             if request.is_for_main_frame {
                 // Optimistically update URL bar before the page loads
                 self.urlbar.borrow_mut().set_url(&request.url);
-                self.window
-                    .set_title(&format!("Loading — {}", request.url));
+                self.window.set_title(&format!("Loading — {}", request.url));
             }
 
             // Ad-blocking logic
-            let Some(ref engine) = self.adblock_engine else { return };
+            let Some(ref engine) = self.adblock_engine else {
+                return;
+            };
 
             let source_url = self
                 .current_url
