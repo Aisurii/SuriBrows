@@ -109,6 +109,17 @@ codegen-units = 1   # Better cross-crate optimization (slower compile, faster ru
 strip = true        # Strip debug symbols — smaller binary
 panic = "abort"     # No unwinding overhead — smaller + slightly faster
 
+# CI-optimized profile: Faster compilation, acceptable runtime performance
+# Use with: cargo build --profile ci
+[profile.ci]
+inherits = "release"
+opt-level = 2           # Down from 3 — 20-30% faster compile, ~5% slower runtime
+lto = "thin"
+codegen-units = 16      # Parallel compilation (release uses 1 — sequential)
+incremental = false     # Disable incremental in CI (avoids cache pollution)
+strip = true
+panic = "abort"
+
 # ── Windows Security Hardening ─────────────────────────────────────────
 # Control Flow Guard (CFG) is enabled via .cargo/config.toml (see that file)
 # CFG validates indirect call targets to prevent ROP/JOP attacks

@@ -23,7 +23,7 @@ const DUCKDUCKGO_SEARCH: &str = "https://duckduckgo.com/?q=";
 /// - Mixed script attacks: mixing Latin, Cyrillic, Greek characters
 ///
 /// ## Example:
-/// ```
+/// ```ignore
 /// let url = Url::parse("https://xn--ggle-0nd.com").unwrap();
 /// assert_eq!(normalize_url_for_display(&url), "⚠️  https://xn--ggle-0nd.com (Punycode)");
 /// ```

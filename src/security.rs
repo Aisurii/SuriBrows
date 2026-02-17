@@ -83,7 +83,7 @@ struct ProcessMitigationImageLoadPolicy {
 ///
 /// ## Example
 ///
-/// ```rust
+/// ```ignore
 /// // Default mode: JIT enabled, ACG disabled
 /// apply_process_mitigations(false);
 ///

@@ -16,3 +16,9 @@
 
 [target.'cfg(windows)']
 rustflags = ["-C", "control-flow-guard"]
+
+# Faster linker for Windows builds
+# LLD (LLVM linker) is ~2-3x faster than MSVC link.exe
+# Bundled with the Rust toolchain — no extra installation needed
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"
