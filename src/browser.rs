@@ -143,6 +143,7 @@ impl App {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Builds Servo `Preferences` tuned for the current machine with privacy enhancements.
+#[allow(clippy::field_reassign_with_default)]
 fn build_servo_preferences() -> servo::Preferences {
     let cpus = std::thread::available_parallelism()
         .map(|n| n.get() as i64)
@@ -154,7 +155,7 @@ fn build_servo_preferences() -> servo::Preferences {
     prefs.layout_threads = cpus.min(8);
     prefs.threadpools_async_runtime_workers_max = (cpus * 2).min(16);
     prefs.threadpools_image_cache_workers_max = cpus.min(8);
-    prefs.threadpools_webrender_workers_max = (cpus / 2).max(2).min(8);
+    prefs.threadpools_webrender_workers_max = (cpus / 2).clamp(2, 8);
     prefs.threadpools_resource_workers_max = cpus.min(8);
     prefs.network_http_cache_size = 50_000;
     prefs.gfx_precache_shaders = true;
@@ -400,28 +401,28 @@ impl ApplicationHandler<WakerEvent> for App {
                 if let Self::Running(state) = self {
                     let pos = state.cursor_position.get();
                     // Ne forwarde le scroll que si le curseur est dans la zone webview
-                    if pos.y >= chrome_h {
-                        if let Some(webview) = state.webviews.borrow().last() {
-                            let (delta_x, delta_y, mode) = match delta {
-                                MouseScrollDelta::LineDelta(dx, dy) => {
-                                    ((dx * 76.0) as f64, (dy * 76.0) as f64, WheelMode::DeltaLine)
-                                }
-                                MouseScrollDelta::PixelDelta(delta) => {
-                                    (delta.x, delta.y, WheelMode::DeltaPixel)
-                                }
-                            };
+                    if pos.y >= chrome_h
+                        && let Some(webview) = state.webviews.borrow().last()
+                    {
+                        let (delta_x, delta_y, mode) = match delta {
+                            MouseScrollDelta::LineDelta(dx, dy) => {
+                                ((dx * 76.0) as f64, (dy * 76.0) as f64, WheelMode::DeltaLine)
+                            }
+                            MouseScrollDelta::PixelDelta(delta) => {
+                                (delta.x, delta.y, WheelMode::DeltaPixel)
+                            }
+                        };
 
-                            let adjusted = DevicePoint::new(pos.x, pos.y - chrome_h);
-                            webview.notify_input_event(InputEvent::Wheel(WheelEvent::new(
-                                WheelDelta {
-                                    x: delta_x,
-                                    y: delta_y,
-                                    z: 0.0,
-                                    mode,
-                                },
-                                adjusted.into(),
-                            )));
-                        }
+                        let adjusted = DevicePoint::new(pos.x, pos.y - chrome_h);
+                        webview.notify_input_event(InputEvent::Wheel(WheelEvent::new(
+                            WheelDelta {
+                                x: delta_x,
+                                y: delta_y,
+                                z: 0.0,
+                                mode,
+                            },
+                            adjusted.into(),
+                        )));
                     }
                 }
             }
@@ -467,12 +468,12 @@ impl ApplicationHandler<WakerEvent> for App {
 
             // ── Curseur quitte la fenêtre ─────────────────────────────
             WindowEvent::CursorLeft { .. } => {
-                if let Self::Running(state) = self {
-                    if let Some(webview) = state.webviews.borrow().last() {
-                        webview.notify_input_event(InputEvent::MouseLeftViewport(
-                            MouseLeftViewportEvent::default(),
-                        ));
-                    }
+                if let Self::Running(state) = self
+                    && let Some(webview) = state.webviews.borrow().last()
+                {
+                    webview.notify_input_event(InputEvent::MouseLeftViewport(
+                        MouseLeftViewportEvent::default(),
+                    ));
                 }
             }
 
@@ -531,26 +532,24 @@ impl ApplicationHandler<WakerEvent> for App {
                     // ── Raccourcis globaux (toujours actifs) ──────────
                     if event.state == ElementState::Pressed {
                         // Ctrl+L : focus barre d'URL
-                        if mods.control_key() {
-                            if let Key::Character(ref c) = event.logical_key {
-                                if c.as_str() == "l" || c.as_str() == "L" {
-                                    state.urlbar.borrow_mut().focus();
-                                    state.window.request_redraw();
-                                    return;
-                                }
-                            }
+                        if mods.control_key()
+                            && let Key::Character(ref c) = event.logical_key
+                            && (c.as_str() == "l" || c.as_str() == "L")
+                        {
+                            state.urlbar.borrow_mut().focus();
+                            state.window.request_redraw();
+                            return;
                         }
 
                         // Ctrl+R : recharger
-                        if mods.control_key() {
-                            if let Key::Character(ref c) = event.logical_key {
-                                if c.as_str() == "r" || c.as_str() == "R" {
-                                    if let Some(webview) = state.webviews.borrow().last() {
-                                        webview.reload();
-                                    }
-                                    return;
-                                }
+                        if mods.control_key()
+                            && let Key::Character(ref c) = event.logical_key
+                            && (c.as_str() == "r" || c.as_str() == "R")
+                        {
+                            if let Some(webview) = state.webviews.borrow().last() {
+                                webview.reload();
                             }
+                            return;
                         }
 
                         // F5 : recharger
@@ -562,23 +561,23 @@ impl ApplicationHandler<WakerEvent> for App {
                         }
 
                         // Alt+Left : retour
-                        if mods.alt_key() {
-                            if let Key::Named(NamedKey::ArrowLeft) = event.logical_key {
-                                if let Some(webview) = state.webviews.borrow().last() {
-                                    webview.go_back(1);
-                                }
-                                return;
+                        if mods.alt_key()
+                            && let Key::Named(NamedKey::ArrowLeft) = event.logical_key
+                        {
+                            if let Some(webview) = state.webviews.borrow().last() {
+                                webview.go_back(1);
                             }
+                            return;
                         }
 
                         // Alt+Right : avant
-                        if mods.alt_key() {
-                            if let Key::Named(NamedKey::ArrowRight) = event.logical_key {
-                                if let Some(webview) = state.webviews.borrow().last() {
-                                    webview.go_forward(1);
-                                }
-                                return;
+                        if mods.alt_key()
+                            && let Key::Named(NamedKey::ArrowRight) = event.logical_key
+                        {
+                            if let Some(webview) = state.webviews.borrow().last() {
+                                webview.go_forward(1);
                             }
+                            return;
                         }
                     }
 

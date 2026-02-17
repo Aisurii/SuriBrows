@@ -92,30 +92,29 @@ fn resources_dir_path() -> PathBuf {
     }
 
     // 2. À côté de l'exécutable
-    if let Ok(exe_path) = env::current_exe() {
-        if let Ok(canonical) = exe_path.canonicalize() {
-            let mut path = canonical.clone();
-            path.pop(); // Enlève le nom de l'exécutable
+    if let Ok(exe_path) = env::current_exe()
+        && let Ok(canonical) = exe_path.canonicalize()
+    {
+        let mut path = canonical.clone();
+        path.pop(); // Enlève le nom de l'exécutable
+        path.push("resources");
+        if path.is_dir() {
+            *dir = Some(path.clone());
+            return path;
+        }
+
+        // 2b. Si l'exécutable est dans target/{debug,release}/, remonter
+        //     au projet root (typique pendant le développement avec cargo).
+        let exe_dir = canonical.parent().unwrap_or(&canonical);
+        if let Some(target_dir) = exe_dir.parent()
+            && target_dir.file_name().is_some_and(|n| n == "target")
+            && let Some(project_root) = target_dir.parent()
+        {
+            let mut path = project_root.to_path_buf();
             path.push("resources");
             if path.is_dir() {
                 *dir = Some(path.clone());
                 return path;
-            }
-
-            // 2b. Si l'exécutable est dans target/{debug,release}/, remonter
-            //     au projet root (typique pendant le développement avec cargo).
-            let exe_dir = canonical.parent().unwrap_or(&canonical);
-            if let Some(target_dir) = exe_dir.parent() {
-                if target_dir.file_name().is_some_and(|n| n == "target") {
-                    if let Some(project_root) = target_dir.parent() {
-                        let mut path = project_root.to_path_buf();
-                        path.push("resources");
-                        if path.is_dir() {
-                            *dir = Some(path.clone());
-                            return path;
-                        }
-                    }
-                }
             }
         }
     }

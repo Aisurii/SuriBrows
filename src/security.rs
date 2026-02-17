@@ -42,6 +42,7 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, SetProcessMitigat
 
 // Process Mitigation Policy constants (from winnt.h)
 #[cfg(target_os = "windows")]
+#[allow(dead_code)] // Kept for future ACG support when Servo exposes JIT disable API
 const PROCESS_MITIGATION_DYNAMIC_CODE_POLICY: i32 = 2;
 #[cfg(target_os = "windows")]
 const PROCESS_MITIGATION_IMAGE_LOAD_POLICY: i32 = 10;
@@ -49,6 +50,7 @@ const PROCESS_MITIGATION_IMAGE_LOAD_POLICY: i32 = 10;
 // Process Mitigation Policy structures (manual definitions, as windows-sys doesn't expose them)
 #[cfg(target_os = "windows")]
 #[repr(C)]
+#[allow(dead_code)] // Kept for future ACG support when Servo exposes JIT disable API
 struct ProcessMitigationDynamicCodePolicy {
     flags: u32,
 }
@@ -232,6 +234,7 @@ fn create_job_object_jail() -> Result<(), String> {
 /// `Ok(())` if policy applied successfully.
 /// `Err(String)` with Windows error code if policy fails.
 #[cfg(target_os = "windows")]
+#[allow(dead_code)] // Kept for future ACG support when Servo exposes JIT disable API
 fn apply_dynamic_code_policy() -> Result<(), String> {
     let policy = ProcessMitigationDynamicCodePolicy {
         flags: 1, // ProhibitDynamicCode = 1 (bit 0)

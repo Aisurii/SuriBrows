@@ -424,12 +424,10 @@ impl ChromeRenderer {
         }
 
         // ── 4. Curseur (si focusé) ───────────────────────────────────────
-        if is_focused {
-            if let Some(cx) = cursor_x {
-                let cursor_h = FONT_SIZE + 4.0;
-                let cursor_y = (ch - cursor_h) / 2.0;
-                self.draw_rect(cx, cursor_y, 2.0, cursor_h, CURSOR_COLOR);
-            }
+        if is_focused && let Some(cx) = cursor_x {
+            let cursor_h = FONT_SIZE + 4.0;
+            let cursor_y = (ch - cursor_h) / 2.0;
+            self.draw_rect(cx, cursor_y, 2.0, cursor_h, CURSOR_COLOR);
         }
 
         // ── Restaurer l'état GL ──────────────────────────────────────────
@@ -475,6 +473,7 @@ impl ChromeRenderer {
     }
 
     /// Dessine un rectangle texturé depuis l'atlas de glyphes.
+    #[allow(clippy::too_many_arguments)]
     unsafe fn draw_textured_rect(
         &self,
         x: f32,
@@ -519,10 +518,5 @@ impl ChromeRenderer {
 
 /// Cast safe d'un slice `[f32]` vers `[u8]` pour l'upload GL.
 fn bytemuck_cast_slice(data: &[f32]) -> &[u8] {
-    unsafe {
-        std::slice::from_raw_parts(
-            data.as_ptr() as *const u8,
-            data.len() * std::mem::size_of::<f32>(),
-        )
-    }
+    unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data)) }
 }

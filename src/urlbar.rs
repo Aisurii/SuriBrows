@@ -82,6 +82,12 @@ pub struct UrlBar {
     current_url: Option<Url>,
 }
 
+impl Default for UrlBar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UrlBar {
     pub fn new() -> Self {
         Self {
@@ -266,17 +272,18 @@ impl UrlBar {
 /// - Sinon, on fait une recherche DuckDuckGo.
 fn resolve_input(input: &str) -> Option<Url> {
     // Déjà une URL valide avec schéma ?
-    if let Ok(url) = Url::parse(input) {
-        if url.scheme() == "http" || url.scheme() == "https" {
-            return Some(url);
-        }
+    if let Ok(url) = Url::parse(input)
+        && (url.scheme() == "http" || url.scheme() == "https")
+    {
+        return Some(url);
     }
 
     // Ressemble à un domaine ? (contient un point, pas d'espace)
-    if input.contains('.') && !input.contains(' ') {
-        if let Ok(url) = Url::parse(&format!("https://{input}")) {
-            return Some(url);
-        }
+    if input.contains('.')
+        && !input.contains(' ')
+        && let Ok(url) = Url::parse(&format!("https://{input}"))
+    {
+        return Some(url);
     }
 
     // Recherche DuckDuckGo
@@ -332,7 +339,6 @@ mod tests {
         // Test that zero-width characters are removed
         // Note: We can't directly parse URLs with these chars, so we test the logic
         let url = Url::parse("https://google.com/path").unwrap();
-        let url_with_zwc = format!("{}​‌‍⁠", url); // Adding invisible chars
 
         // The normalize function filters these when processing the URL
         let normalized = normalize_url_for_display(&url);
