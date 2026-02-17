@@ -6,11 +6,11 @@ on:
   pull_request:
 
 jobs:
-  # Fast checks that don't require full Servo compilation
-  lint:
-    name: Format & Lint
+  # Fast format check — no compilation needed, runs in < 1 minute
+  format:
+    name: Format Check
     runs-on: windows-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
       - name: Checkout code
@@ -20,19 +20,16 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.91.0"
-          components: rustfmt, clippy
+          components: rustfmt
 
       - name: Check code formatting
         run: cargo fmt --all -- --check
 
-      - name: Run Clippy (check only)
-        run: cargo clippy --all-targets --all-features --no-deps -- -D warnings
-
-  # Full compilation, tests, and release build
+  # Full compilation: clippy, tests, and CI release build
   test-and-build:
-    name: Test & Build
+    name: Clippy, Test & Build
     runs-on: windows-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
 
     env:
       CARGO_INCREMENTAL: "0"
@@ -59,6 +56,7 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.91.0"
+          components: clippy
 
       - name: Cache cargo dependencies
         uses: actions/cache@v4
@@ -68,10 +66,12 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-ci-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-ci-
             ${{ runner.os }}-cargo-
+
+      - name: Run Clippy linter
+        run: cargo clippy --all-targets --all-features --no-deps -- -D warnings
 
       - name: Run unit tests
         run: cargo test --all-features
