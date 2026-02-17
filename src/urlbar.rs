@@ -369,7 +369,7 @@ mod tests {
     fn test_url_bar_uses_normalization() {
         // Test that UrlBar actually uses the normalization function
         let mut urlbar = UrlBar::new();
-        let punycode_url = Url::parse("https://xn--test-123.com").unwrap();
+        let punycode_url = Url::parse("https://xn--ggle-0nd.com").unwrap();
 
         urlbar.set_url(&punycode_url);
 
@@ -384,7 +384,7 @@ mod tests {
     fn test_unfocus_restores_normalized_url() {
         // Test that unfocus() also uses normalization
         let mut urlbar = UrlBar::new();
-        let punycode_url = Url::parse("https://xn--evil-123.com").unwrap();
+        let punycode_url = Url::parse("https://xn--ggle-0nd.com/evil").unwrap();
 
         urlbar.set_url(&punycode_url);
         urlbar.focus();
