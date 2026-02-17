@@ -25,9 +25,11 @@ jobs:
       - name: Check code formatting
         run: cargo fmt --all -- --check
 
-  # Full compilation: clippy, tests, and CI release build
-  test-and-build:
-    name: Clippy, Test & Build
+  # Clippy (check-compiles all deps) then tests (debug-compiles and runs).
+  # No release build — CI verifies correctness, not binary production.
+  # Clippy and test share target/debug/ artifacts, so this is ~1.5x compile, not 2x.
+  test:
+    name: Clippy & Test
     runs-on: windows-latest
     timeout-minutes: 60
 
@@ -75,6 +77,3 @@ jobs:
 
       - name: Run unit tests
         run: cargo test --all-features
-
-      - name: Build CI release binary
-        run: cargo build --profile ci
