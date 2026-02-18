@@ -16,28 +16,28 @@ use winit::keyboard::{
 /// Convertit un `KeyEvent` Winit + état des modificateurs en `KeyboardEvent` Servo.
 pub fn keyboard_event_from_winit(key_event: &KeyEvent, state: ModifiersState) -> KeyboardEvent {
     KeyboardEvent::new_without_event(
-        key_state_from_winit(key_event),
-        key_from_winit(key_event),
-        code_from_winit(key_event),
-        location_from_winit(key_event),
+        key_state_from_winit(key_event.state),
+        key_from_winit(&key_event.logical_key),
+        code_from_winit(&key_event.physical_key),
+        location_from_winit(key_event.location),
         modifiers_from_winit(state),
         false,
         false,
     )
 }
 
-fn key_state_from_winit(key_event: &KeyEvent) -> KeyState {
-    match key_event.state {
+fn key_state_from_winit(state: ElementState) -> KeyState {
+    match state {
         ElementState::Pressed => KeyState::Down,
         ElementState::Released => KeyState::Up,
     }
 }
 
 #[allow(deprecated)]
-fn key_from_winit(key_event: &KeyEvent) -> Key {
-    let named_key = match key_event.logical_key {
-        WinitKey::Named(named_key) => named_key,
-        WinitKey::Character(ref string) => return Key::Character(string.to_string()),
+fn key_from_winit(logical_key: &WinitKey) -> Key {
+    let named_key = match logical_key {
+        WinitKey::Named(named_key) => *named_key,
+        WinitKey::Character(string) => return Key::Character(string.to_string()),
         WinitKey::Unidentified(_) | WinitKey::Dead(_) => {
             return Key::Named(NamedKey::Unidentified);
         }
@@ -354,8 +354,8 @@ fn key_from_winit(key_event: &KeyEvent) -> Key {
     }
 }
 
-fn location_from_winit(key_event: &KeyEvent) -> Location {
-    match key_event.location {
+fn location_from_winit(location: WinitKeyLocation) -> Location {
+    match location {
         WinitKeyLocation::Left => Location::Left,
         WinitKeyLocation::Numpad => Location::Numpad,
         WinitKeyLocation::Right => Location::Right,
@@ -364,9 +364,9 @@ fn location_from_winit(key_event: &KeyEvent) -> Location {
 }
 
 #[allow(deprecated)]
-fn code_from_winit(key_event: &KeyEvent) -> Code {
-    let key_code = match key_event.physical_key {
-        PhysicalKey::Code(key_code) => key_code,
+fn code_from_winit(physical_key: &PhysicalKey) -> Code {
+    let key_code = match physical_key {
+        PhysicalKey::Code(key_code) => *key_code,
         PhysicalKey::Unidentified(_) => return Code::Unidentified,
     };
 
@@ -576,4 +576,294 @@ fn modifiers_from_winit(mods: ModifiersState) -> Modifiers {
     modifiers.set(Modifiers::ALT, mods.alt_key());
     modifiers.set(Modifiers::META, mods.super_key());
     modifiers
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── key_state_from_winit ──────────────────────────────────────────
+
+    #[test]
+    fn test_key_state_pressed_maps_to_down() {
+        assert_eq!(key_state_from_winit(ElementState::Pressed), KeyState::Down);
+    }
+
+    #[test]
+    fn test_key_state_released_maps_to_up() {
+        assert_eq!(key_state_from_winit(ElementState::Released), KeyState::Up);
+    }
+
+    // ── key_from_winit ────────────────────────────────────────────────
+
+    #[test]
+    fn test_character_key_a() {
+        let key = WinitKey::Character("a".into());
+        assert_eq!(key_from_winit(&key), Key::Character("a".to_string()));
+    }
+
+    #[test]
+    fn test_character_key_unicode() {
+        let key = WinitKey::Character("é".into());
+        assert_eq!(key_from_winit(&key), Key::Character("é".to_string()));
+    }
+
+    #[test]
+    fn test_named_key_enter() {
+        let key = WinitKey::Named(WinitNamedKey::Enter);
+        assert_eq!(key_from_winit(&key), Key::Named(NamedKey::Enter));
+    }
+
+    #[test]
+    fn test_named_key_escape() {
+        let key = WinitKey::Named(WinitNamedKey::Escape);
+        assert_eq!(key_from_winit(&key), Key::Named(NamedKey::Escape));
+    }
+
+    #[test]
+    fn test_named_key_backspace() {
+        let key = WinitKey::Named(WinitNamedKey::Backspace);
+        assert_eq!(key_from_winit(&key), Key::Named(NamedKey::Backspace));
+    }
+
+    #[test]
+    fn test_named_key_tab() {
+        let key = WinitKey::Named(WinitNamedKey::Tab);
+        assert_eq!(key_from_winit(&key), Key::Named(NamedKey::Tab));
+    }
+
+    #[test]
+    fn test_space_maps_to_character() {
+        // Space is a special case: maps to Key::Character(" "), not NamedKey::Space
+        let key = WinitKey::Named(WinitNamedKey::Space);
+        assert_eq!(key_from_winit(&key), Key::Character(" ".to_string()));
+    }
+
+    #[test]
+    fn test_function_keys_f1_through_f12() {
+        let pairs = [
+            (WinitNamedKey::F1, NamedKey::F1),
+            (WinitNamedKey::F2, NamedKey::F2),
+            (WinitNamedKey::F3, NamedKey::F3),
+            (WinitNamedKey::F4, NamedKey::F4),
+            (WinitNamedKey::F5, NamedKey::F5),
+            (WinitNamedKey::F6, NamedKey::F6),
+            (WinitNamedKey::F7, NamedKey::F7),
+            (WinitNamedKey::F8, NamedKey::F8),
+            (WinitNamedKey::F9, NamedKey::F9),
+            (WinitNamedKey::F10, NamedKey::F10),
+            (WinitNamedKey::F11, NamedKey::F11),
+            (WinitNamedKey::F12, NamedKey::F12),
+        ];
+        for (winit_key, servo_key) in pairs {
+            let key = WinitKey::Named(winit_key);
+            assert_eq!(key_from_winit(&key), Key::Named(servo_key));
+        }
+    }
+
+    #[test]
+    fn test_arrow_keys() {
+        let pairs = [
+            (WinitNamedKey::ArrowUp, NamedKey::ArrowUp),
+            (WinitNamedKey::ArrowDown, NamedKey::ArrowDown),
+            (WinitNamedKey::ArrowLeft, NamedKey::ArrowLeft),
+            (WinitNamedKey::ArrowRight, NamedKey::ArrowRight),
+        ];
+        for (winit_key, servo_key) in pairs {
+            let key = WinitKey::Named(winit_key);
+            assert_eq!(key_from_winit(&key), Key::Named(servo_key));
+        }
+    }
+
+    #[test]
+    fn test_modifier_keys() {
+        let pairs = [
+            (WinitNamedKey::Alt, NamedKey::Alt),
+            (WinitNamedKey::Control, NamedKey::Control),
+            (WinitNamedKey::Shift, NamedKey::Shift),
+            (WinitNamedKey::Meta, NamedKey::Meta),
+            (WinitNamedKey::Super, NamedKey::Super),
+        ];
+        for (winit_key, servo_key) in pairs {
+            let key = WinitKey::Named(winit_key);
+            assert_eq!(key_from_winit(&key), Key::Named(servo_key));
+        }
+    }
+
+    #[test]
+    fn test_media_keys() {
+        let pairs = [
+            (WinitNamedKey::MediaPlayPause, NamedKey::MediaPlayPause),
+            (WinitNamedKey::AudioVolumeUp, NamedKey::AudioVolumeUp),
+            (WinitNamedKey::AudioVolumeDown, NamedKey::AudioVolumeDown),
+            (WinitNamedKey::AudioVolumeMute, NamedKey::AudioVolumeMute),
+        ];
+        for (winit_key, servo_key) in pairs {
+            let key = WinitKey::Named(winit_key);
+            assert_eq!(key_from_winit(&key), Key::Named(servo_key));
+        }
+    }
+
+    #[test]
+    fn test_unidentified_key() {
+        let key = WinitKey::Unidentified(winit::keyboard::NativeKeyCode::Unidentified.into());
+        assert_eq!(key_from_winit(&key), Key::Named(NamedKey::Unidentified));
+    }
+
+    #[test]
+    fn test_dead_key() {
+        let key = WinitKey::Dead(None);
+        assert_eq!(key_from_winit(&key), Key::Named(NamedKey::Unidentified));
+    }
+
+    // ── location_from_winit ───────────────────────────────────────────
+
+    #[test]
+    fn test_location_standard() {
+        assert_eq!(location_from_winit(WinitKeyLocation::Standard), Location::Standard);
+    }
+
+    #[test]
+    fn test_location_left() {
+        assert_eq!(location_from_winit(WinitKeyLocation::Left), Location::Left);
+    }
+
+    #[test]
+    fn test_location_right() {
+        assert_eq!(location_from_winit(WinitKeyLocation::Right), Location::Right);
+    }
+
+    #[test]
+    fn test_location_numpad() {
+        assert_eq!(location_from_winit(WinitKeyLocation::Numpad), Location::Numpad);
+    }
+
+    // ── code_from_winit ───────────────────────────────────────────────
+
+    #[test]
+    fn test_code_key_a() {
+        assert_eq!(code_from_winit(&PhysicalKey::Code(KeyCode::KeyA)), Code::KeyA);
+    }
+
+    #[test]
+    fn test_code_digits() {
+        let pairs = [
+            (KeyCode::Digit0, Code::Digit0),
+            (KeyCode::Digit1, Code::Digit1),
+            (KeyCode::Digit2, Code::Digit2),
+            (KeyCode::Digit3, Code::Digit3),
+            (KeyCode::Digit4, Code::Digit4),
+            (KeyCode::Digit5, Code::Digit5),
+            (KeyCode::Digit6, Code::Digit6),
+            (KeyCode::Digit7, Code::Digit7),
+            (KeyCode::Digit8, Code::Digit8),
+            (KeyCode::Digit9, Code::Digit9),
+        ];
+        for (key_code, expected) in pairs {
+            assert_eq!(code_from_winit(&PhysicalKey::Code(key_code)), expected);
+        }
+    }
+
+    #[test]
+    fn test_code_numpad_keys() {
+        let pairs = [
+            (KeyCode::Numpad0, Code::Numpad0),
+            (KeyCode::Numpad9, Code::Numpad9),
+            (KeyCode::NumpadAdd, Code::NumpadAdd),
+            (KeyCode::NumpadSubtract, Code::NumpadSubtract),
+            (KeyCode::NumpadMultiply, Code::NumpadMultiply),
+            (KeyCode::NumpadDivide, Code::NumpadDivide),
+            (KeyCode::NumpadEnter, Code::NumpadEnter),
+        ];
+        for (key_code, expected) in pairs {
+            assert_eq!(code_from_winit(&PhysicalKey::Code(key_code)), expected);
+        }
+    }
+
+    #[test]
+    fn test_code_special_keys() {
+        let pairs = [
+            (KeyCode::Space, Code::Space),
+            (KeyCode::Enter, Code::Enter),
+            (KeyCode::Tab, Code::Tab),
+            (KeyCode::Backspace, Code::Backspace),
+            (KeyCode::Escape, Code::Escape),
+        ];
+        for (key_code, expected) in pairs {
+            assert_eq!(code_from_winit(&PhysicalKey::Code(key_code)), expected);
+        }
+    }
+
+    #[test]
+    fn test_code_meta_maps_to_super() {
+        // KeyCode::Meta → Code::Super (not Code::Meta)
+        assert_eq!(code_from_winit(&PhysicalKey::Code(KeyCode::Meta)), Code::Super);
+    }
+
+    #[test]
+    fn test_code_super_left_maps_to_meta_left() {
+        // KeyCode::SuperLeft → Code::MetaLeft
+        assert_eq!(code_from_winit(&PhysicalKey::Code(KeyCode::SuperLeft)), Code::MetaLeft);
+    }
+
+    #[test]
+    fn test_code_super_right_maps_to_meta_right() {
+        // KeyCode::SuperRight → Code::MetaRight
+        assert_eq!(code_from_winit(&PhysicalKey::Code(KeyCode::SuperRight)), Code::MetaRight);
+    }
+
+    #[test]
+    fn test_code_unidentified_physical_key() {
+        let key = PhysicalKey::Unidentified(winit::keyboard::NativeKeyCode::Unidentified);
+        assert_eq!(code_from_winit(&key), Code::Unidentified);
+    }
+
+    // ── modifiers_from_winit ──────────────────────────────────────────
+
+    #[test]
+    fn test_modifiers_empty() {
+        assert_eq!(modifiers_from_winit(ModifiersState::empty()), Modifiers::empty());
+    }
+
+    #[test]
+    fn test_modifiers_control() {
+        let result = modifiers_from_winit(ModifiersState::CONTROL);
+        assert!(result.contains(Modifiers::CONTROL));
+        assert!(!result.contains(Modifiers::SHIFT));
+    }
+
+    #[test]
+    fn test_modifiers_shift() {
+        assert!(modifiers_from_winit(ModifiersState::SHIFT).contains(Modifiers::SHIFT));
+    }
+
+    #[test]
+    fn test_modifiers_alt() {
+        assert!(modifiers_from_winit(ModifiersState::ALT).contains(Modifiers::ALT));
+    }
+
+    #[test]
+    fn test_modifiers_super_maps_to_meta() {
+        // Winit SUPER → Servo META
+        assert!(modifiers_from_winit(ModifiersState::SUPER).contains(Modifiers::META));
+    }
+
+    #[test]
+    fn test_modifiers_combined() {
+        let result = modifiers_from_winit(ModifiersState::CONTROL | ModifiersState::SHIFT);
+        assert!(result.contains(Modifiers::CONTROL));
+        assert!(result.contains(Modifiers::SHIFT));
+        assert!(!result.contains(Modifiers::ALT));
+    }
+
+    #[test]
+    fn test_modifiers_all() {
+        let mods =
+            ModifiersState::CONTROL | ModifiersState::SHIFT | ModifiersState::ALT | ModifiersState::SUPER;
+        let result = modifiers_from_winit(mods);
+        assert!(result.contains(Modifiers::CONTROL));
+        assert!(result.contains(Modifiers::SHIFT));
+        assert!(result.contains(Modifiers::ALT));
+        assert!(result.contains(Modifiers::META));
+    }
 }

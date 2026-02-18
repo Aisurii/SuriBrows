@@ -170,3 +170,159 @@ fn find_filters_dir() -> Option<PathBuf> {
     warn!("Dossier resources/filters/ introuvable. Ad-blocking désactivé.");
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Builds an AdblockEngine from raw filter rules (bypasses filesystem).
+    fn engine_from_rules(rules: &[&str]) -> AdblockEngine {
+        let mut filter_set = FilterSet::new(false);
+        for rule in rules {
+            filter_set.add_filter_list(rule, ParseOptions::default());
+        }
+        AdblockEngine {
+            engine: Engine::from_filter_set(filter_set, true),
+            cache: RefCell::new(HashMap::new()),
+        }
+    }
+
+    #[test]
+    fn test_should_block_ad_url() {
+        let engine = engine_from_rules(&["||ads.example.com^"]);
+        assert!(engine.should_block(
+            "https://ads.example.com/banner.js",
+            "https://example.com",
+            "script"
+        ));
+    }
+
+    #[test]
+    fn test_should_not_block_clean_url() {
+        let engine = engine_from_rules(&["||ads.example.com^"]);
+        assert!(!engine.should_block(
+            "https://example.com/page.html",
+            "https://example.com",
+            "document"
+        ));
+    }
+
+    #[test]
+    fn test_cache_returns_same_result() {
+        let engine = engine_from_rules(&["||ads.example.com^"]);
+        let first = engine.should_block(
+            "https://ads.example.com/banner.js",
+            "https://example.com",
+            "script",
+        );
+        let second = engine.should_block(
+            "https://ads.example.com/banner.js",
+            "https://example.com",
+            "script",
+        );
+        assert_eq!(first, second);
+        assert_eq!(engine.cache.borrow().len(), 1);
+    }
+
+    #[test]
+    fn test_clear_cache_empties_cache() {
+        let engine = engine_from_rules(&["||ads.example.com^"]);
+        engine.should_block(
+            "https://ads.example.com/banner.js",
+            "https://example.com",
+            "script",
+        );
+        assert!(!engine.cache.borrow().is_empty());
+        engine.clear_cache();
+        assert!(engine.cache.borrow().is_empty());
+    }
+
+    #[test]
+    fn test_malformed_url_not_blocked() {
+        let engine = engine_from_rules(&["||ads.example.com^"]);
+        assert!(!engine.should_block(
+            "not-a-valid-url-at-all",
+            "https://example.com",
+            "other"
+        ));
+    }
+
+    #[test]
+    fn test_data_uri_not_blocked() {
+        let engine = engine_from_rules(&["||ads.example.com^"]);
+        assert!(!engine.should_block(
+            "data:text/html,<h1>hi</h1>",
+            "https://example.com",
+            "document"
+        ));
+    }
+
+    #[test]
+    fn test_empty_filter_set_blocks_nothing() {
+        let engine = engine_from_rules(&[]);
+        assert!(!engine.should_block(
+            "https://ads.example.com/banner.js",
+            "https://example.com",
+            "script"
+        ));
+    }
+
+    #[test]
+    fn test_multiple_filters() {
+        let engine = engine_from_rules(&["||ads.example.com^\n||tracker.example.com^"]);
+        assert!(engine.should_block(
+            "https://ads.example.com/x.js",
+            "https://example.com",
+            "script"
+        ));
+        assert!(engine.should_block(
+            "https://tracker.example.com/t.gif",
+            "https://example.com",
+            "image"
+        ));
+        assert!(!engine.should_block(
+            "https://example.com/page.html",
+            "https://example.com",
+            "document"
+        ));
+    }
+
+    #[test]
+    fn test_different_source_urls_cached_separately() {
+        let engine = engine_from_rules(&["||ads.example.com^"]);
+        engine.should_block(
+            "https://ads.example.com/x.js",
+            "https://site-a.com",
+            "script",
+        );
+        engine.should_block(
+            "https://ads.example.com/x.js",
+            "https://site-b.com",
+            "script",
+        );
+        assert_eq!(engine.cache.borrow().len(), 2);
+    }
+
+    #[test]
+    fn test_new_returns_some_when_filters_exist() {
+        // This test requires running from project root where resources/filters/ exists
+        if std::path::Path::new("resources/filters").is_dir() {
+            let engine = AdblockEngine::new();
+            assert!(engine.is_some());
+        }
+    }
+
+    #[test]
+    fn test_cache_hit_no_panic() {
+        let engine = engine_from_rules(&["||ads.example.com^"]);
+        // Call many times to exercise cache path
+        for _ in 0..100 {
+            engine.should_block(
+                "https://ads.example.com/x.js",
+                "https://example.com",
+                "script",
+            );
+        }
+        assert_eq!(engine.cache.borrow().len(), 1);
+    }
+}

@@ -307,3 +307,25 @@ fn apply_image_load_policy() -> Result<(), String> {
     eprintln!("✓ Image load policy applied (no remote DLLs)");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_apply_mitigations_no_acg_no_panic() {
+        apply_process_mitigations(false);
+    }
+
+    #[test]
+    fn test_apply_mitigations_with_acg_no_panic() {
+        // ACG is intentionally disabled even when requested (Servo JIT conflict)
+        apply_process_mitigations(true);
+    }
+
+    #[test]
+    fn test_mitigations_idempotent() {
+        apply_process_mitigations(false);
+        apply_process_mitigations(false);
+    }
+}

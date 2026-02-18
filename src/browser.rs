@@ -644,3 +644,117 @@ impl ApplicationHandler<WakerEvent> for App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── webview_size ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_webview_size_subtracts_chrome_height() {
+        let result = webview_size(PhysicalSize::new(1280, 800));
+        assert_eq!(result, PhysicalSize::new(1280, 760));
+    }
+
+    #[test]
+    fn test_webview_size_preserves_width() {
+        let result = webview_size(PhysicalSize::new(1920, 1080));
+        assert_eq!(result.width, 1920);
+    }
+
+    #[test]
+    fn test_webview_size_saturates_at_zero() {
+        // Height 20 < CHROME_HEIGHT 40, saturating_sub gives 0
+        let result = webview_size(PhysicalSize::new(100, 20));
+        assert_eq!(result, PhysicalSize::new(100, 0));
+    }
+
+    #[test]
+    fn test_webview_size_exact_chrome_height() {
+        let result = webview_size(PhysicalSize::new(100, chrome::CHROME_HEIGHT));
+        assert_eq!(result, PhysicalSize::new(100, 0));
+    }
+
+    #[test]
+    fn test_webview_size_zero() {
+        let result = webview_size(PhysicalSize::new(0, 0));
+        assert_eq!(result, PhysicalSize::new(0, 0));
+    }
+
+    // ── build_servo_preferences ──────────────────────────────────────
+
+    #[test]
+    fn test_preferences_layout_threads_bounded() {
+        let prefs = build_servo_preferences();
+        assert!(prefs.layout_threads >= 1, "layout_threads should be >= 1");
+        assert!(prefs.layout_threads <= 8, "layout_threads should be <= 8");
+    }
+
+    #[test]
+    fn test_preferences_tls_enforced() {
+        let prefs = build_servo_preferences();
+        assert!(prefs.network_enforce_tls_enabled);
+    }
+
+    #[test]
+    fn test_preferences_mime_sniff_disabled() {
+        let prefs = build_servo_preferences();
+        assert!(!prefs.network_mime_sniff);
+    }
+
+    #[test]
+    fn test_preferences_geolocation_disabled() {
+        let prefs = build_servo_preferences();
+        assert!(!prefs.dom_geolocation_enabled);
+    }
+
+    #[test]
+    fn test_preferences_bluetooth_disabled() {
+        let prefs = build_servo_preferences();
+        assert!(!prefs.dom_bluetooth_enabled);
+    }
+
+    #[test]
+    fn test_preferences_webrtc_disabled() {
+        let prefs = build_servo_preferences();
+        assert!(!prefs.dom_webrtc_enabled);
+    }
+
+    #[test]
+    fn test_preferences_notification_disabled() {
+        let prefs = build_servo_preferences();
+        assert!(!prefs.dom_notification_enabled);
+    }
+
+    #[test]
+    fn test_preferences_user_agent_set() {
+        let prefs = build_servo_preferences();
+        assert!(prefs.user_agent.contains("Chrome"), "UA should contain Chrome");
+        assert!(!prefs.user_agent.is_empty(), "UA should not be empty");
+    }
+
+    #[test]
+    fn test_preferences_cache_size() {
+        let prefs = build_servo_preferences();
+        assert_eq!(prefs.network_http_cache_size, 50_000);
+    }
+
+    #[test]
+    fn test_preferences_precache_shaders() {
+        let prefs = build_servo_preferences();
+        assert!(prefs.gfx_precache_shaders);
+    }
+
+    #[test]
+    fn test_preferences_webrender_workers_bounded() {
+        let prefs = build_servo_preferences();
+        assert!(prefs.threadpools_webrender_workers_max >= 2);
+        assert!(prefs.threadpools_webrender_workers_max <= 8);
+    }
+
+    #[test]
+    fn test_preferences_chrome_height_is_40() {
+        assert_eq!(chrome::CHROME_HEIGHT, 40);
+    }
+}

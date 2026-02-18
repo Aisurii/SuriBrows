@@ -520,3 +520,132 @@ impl ChromeRenderer {
 fn bytemuck_cast_slice(data: &[f32]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(data.as_ptr() as *const u8, std::mem::size_of_val(data)) }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn build_test_atlas() -> GlyphAtlas {
+        let font = fontdue::Font::from_bytes(FONT_BYTES, fontdue::FontSettings::default())
+            .expect("Failed to load Inter font");
+        GlyphAtlas::build(&font)
+    }
+
+    #[test]
+    fn test_atlas_contains_all_ascii_printable() {
+        let atlas = build_test_atlas();
+        for b in 32u8..=126 {
+            let c = b as char;
+            assert!(
+                atlas.glyphs.contains_key(&c),
+                "Atlas missing char '{}' ({})",
+                c,
+                b
+            );
+        }
+    }
+
+    #[test]
+    fn test_atlas_width_is_512() {
+        let atlas = build_test_atlas();
+        assert_eq!(atlas.width, 512);
+    }
+
+    #[test]
+    fn test_atlas_height_valid() {
+        let atlas = build_test_atlas();
+        assert!(atlas.height > 0);
+        assert!(atlas.height >= 64, "Atlas height should be >= 64");
+    }
+
+    #[test]
+    fn test_atlas_pixel_buffer_size() {
+        let atlas = build_test_atlas();
+        assert_eq!(
+            atlas.pixels.len(),
+            (atlas.width * atlas.height) as usize
+        );
+    }
+
+    #[test]
+    fn test_glyph_advance_positive() {
+        let atlas = build_test_atlas();
+        for (&c, glyph) in &atlas.glyphs {
+            assert!(
+                glyph.advance_x > 0.0,
+                "Glyph '{}' has non-positive advance_x: {}",
+                c,
+                glyph.advance_x
+            );
+        }
+    }
+
+    #[test]
+    fn test_glyphs_within_atlas_bounds() {
+        let atlas = build_test_atlas();
+        for (&c, glyph) in &atlas.glyphs {
+            assert!(
+                glyph.atlas_x + glyph.width <= atlas.width,
+                "Glyph '{}' exceeds atlas width: {} + {} > {}",
+                c,
+                glyph.atlas_x,
+                glyph.width,
+                atlas.width
+            );
+            assert!(
+                glyph.atlas_y + glyph.height <= atlas.height,
+                "Glyph '{}' exceeds atlas height: {} + {} > {}",
+                c,
+                glyph.atlas_y,
+                glyph.height,
+                atlas.height
+            );
+        }
+    }
+
+    #[test]
+    fn test_no_overlapping_glyphs() {
+        let atlas = build_test_atlas();
+        let glyphs: Vec<_> = atlas.glyphs.iter().collect();
+        for i in 0..glyphs.len() {
+            for j in (i + 1)..glyphs.len() {
+                let (&c1, g1) = glyphs[i];
+                let (&c2, g2) = glyphs[j];
+                // Skip zero-size glyphs (like space)
+                if g1.width == 0 || g1.height == 0 || g2.width == 0 || g2.height == 0 {
+                    continue;
+                }
+                let overlap_x = g1.atlas_x < g2.atlas_x + g2.width && g2.atlas_x < g1.atlas_x + g1.width;
+                let overlap_y =
+                    g1.atlas_y < g2.atlas_y + g2.height && g2.atlas_y < g1.atlas_y + g1.height;
+                assert!(
+                    !(overlap_x && overlap_y),
+                    "Glyphs '{}' and '{}' overlap",
+                    c1,
+                    c2
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_space_has_zero_dimensions() {
+        let atlas = build_test_atlas();
+        let space = atlas.glyphs.get(&' ').expect("Space glyph missing");
+        assert_eq!(space.width, 0, "Space should have width 0");
+        assert_eq!(space.height, 0, "Space should have height 0");
+        assert!(space.advance_x > 0.0, "Space should have positive advance");
+    }
+
+    #[test]
+    fn test_bytemuck_cast_slice_length() {
+        let data: [f32; 2] = [1.0, 2.0];
+        let bytes = bytemuck_cast_slice(&data);
+        assert_eq!(bytes.len(), 8); // 2 * 4 bytes
+    }
+
+    #[test]
+    fn test_chrome_height_is_40() {
+        assert_eq!(CHROME_HEIGHT, 40);
+    }
+}
