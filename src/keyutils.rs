@@ -675,6 +675,7 @@ mod tests {
         }
     }
 
+    #[allow(deprecated)]
     #[test]
     fn test_modifier_keys() {
         let pairs = [
@@ -720,7 +721,10 @@ mod tests {
 
     #[test]
     fn test_location_standard() {
-        assert_eq!(location_from_winit(WinitKeyLocation::Standard), Location::Standard);
+        assert_eq!(
+            location_from_winit(WinitKeyLocation::Standard),
+            Location::Standard
+        );
     }
 
     #[test]
@@ -730,19 +734,28 @@ mod tests {
 
     #[test]
     fn test_location_right() {
-        assert_eq!(location_from_winit(WinitKeyLocation::Right), Location::Right);
+        assert_eq!(
+            location_from_winit(WinitKeyLocation::Right),
+            Location::Right
+        );
     }
 
     #[test]
     fn test_location_numpad() {
-        assert_eq!(location_from_winit(WinitKeyLocation::Numpad), Location::Numpad);
+        assert_eq!(
+            location_from_winit(WinitKeyLocation::Numpad),
+            Location::Numpad
+        );
     }
 
     // ── code_from_winit ───────────────────────────────────────────────
 
     #[test]
     fn test_code_key_a() {
-        assert_eq!(code_from_winit(&PhysicalKey::Code(KeyCode::KeyA)), Code::KeyA);
+        assert_eq!(
+            code_from_winit(&PhysicalKey::Code(KeyCode::KeyA)),
+            Code::KeyA
+        );
     }
 
     #[test]
@@ -794,22 +807,32 @@ mod tests {
         }
     }
 
+    #[allow(deprecated)]
     #[test]
     fn test_code_meta_maps_to_super() {
         // KeyCode::Meta → Code::Super (not Code::Meta)
-        assert_eq!(code_from_winit(&PhysicalKey::Code(KeyCode::Meta)), Code::Super);
+        assert_eq!(
+            code_from_winit(&PhysicalKey::Code(KeyCode::Meta)),
+            Code::Super
+        );
     }
 
     #[test]
     fn test_code_super_left_maps_to_meta_left() {
         // KeyCode::SuperLeft → Code::MetaLeft
-        assert_eq!(code_from_winit(&PhysicalKey::Code(KeyCode::SuperLeft)), Code::MetaLeft);
+        assert_eq!(
+            code_from_winit(&PhysicalKey::Code(KeyCode::SuperLeft)),
+            Code::MetaLeft
+        );
     }
 
     #[test]
     fn test_code_super_right_maps_to_meta_right() {
         // KeyCode::SuperRight → Code::MetaRight
-        assert_eq!(code_from_winit(&PhysicalKey::Code(KeyCode::SuperRight)), Code::MetaRight);
+        assert_eq!(
+            code_from_winit(&PhysicalKey::Code(KeyCode::SuperRight)),
+            Code::MetaRight
+        );
     }
 
     #[test]
@@ -822,7 +845,10 @@ mod tests {
 
     #[test]
     fn test_modifiers_empty() {
-        assert_eq!(modifiers_from_winit(ModifiersState::empty()), Modifiers::empty());
+        assert_eq!(
+            modifiers_from_winit(ModifiersState::empty()),
+            Modifiers::empty()
+        );
     }
 
     #[test]
@@ -858,8 +884,10 @@ mod tests {
 
     #[test]
     fn test_modifiers_all() {
-        let mods =
-            ModifiersState::CONTROL | ModifiersState::SHIFT | ModifiersState::ALT | ModifiersState::SUPER;
+        let mods = ModifiersState::CONTROL
+            | ModifiersState::SHIFT
+            | ModifiersState::ALT
+            | ModifiersState::SUPER;
         let result = modifiers_from_winit(mods);
         assert!(result.contains(Modifiers::CONTROL));
         assert!(result.contains(Modifiers::SHIFT));

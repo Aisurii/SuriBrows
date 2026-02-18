@@ -561,10 +561,7 @@ mod tests {
     #[test]
     fn test_atlas_pixel_buffer_size() {
         let atlas = build_test_atlas();
-        assert_eq!(
-            atlas.pixels.len(),
-            (atlas.width * atlas.height) as usize
-        );
+        assert_eq!(atlas.pixels.len(), (atlas.width * atlas.height) as usize);
     }
 
     #[test]
@@ -615,7 +612,8 @@ mod tests {
                 if g1.width == 0 || g1.height == 0 || g2.width == 0 || g2.height == 0 {
                     continue;
                 }
-                let overlap_x = g1.atlas_x < g2.atlas_x + g2.width && g2.atlas_x < g1.atlas_x + g1.width;
+                let overlap_x =
+                    g1.atlas_x < g2.atlas_x + g2.width && g2.atlas_x < g1.atlas_x + g1.width;
                 let overlap_y =
                     g1.atlas_y < g2.atlas_y + g2.height && g2.atlas_y < g1.atlas_y + g1.height;
                 assert!(

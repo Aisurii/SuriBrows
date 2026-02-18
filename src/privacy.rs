@@ -240,11 +240,7 @@ mod tests {
     #[test]
     fn test_malformed_url_not_blocked() {
         let engine = engine_from_rules(&["||ads.example.com^"]);
-        assert!(!engine.should_block(
-            "not-a-valid-url-at-all",
-            "https://example.com",
-            "other"
-        ));
+        assert!(!engine.should_block("not-a-valid-url-at-all", "https://example.com", "other"));
     }
 
     #[test]

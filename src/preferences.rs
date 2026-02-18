@@ -144,7 +144,10 @@ mod tests {
     #[test]
     fn test_preferences_user_agent_set() {
         let prefs = build_servo_preferences();
-        assert!(prefs.user_agent.contains("Chrome"), "UA should contain Chrome");
+        assert!(
+            prefs.user_agent.contains("Chrome"),
+            "UA should contain Chrome"
+        );
         assert!(!prefs.user_agent.is_empty(), "UA should not be empty");
     }
 
