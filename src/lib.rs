@@ -17,6 +17,9 @@
 //!
 //! - [`keyutils`] : Conversion des événements clavier Winit vers les types Servo.
 //!
+//! - [`preferences`] : Configuration du moteur Servo — performance tuning et
+//!   paramètres privacy/sécurité (TLS, fingerprinting, WebRTC, etc.).
+//!
 //! - [`privacy`] : Middleware d'interception réseau — ad-blocking et tracker blocking
 //!   via le crate `adblock` (Brave). Intégré dans `WebViewDelegate::load_web_resource()`.
 //!
@@ -32,6 +35,7 @@
 pub mod browser;
 pub mod chrome;
 pub mod keyutils;
+pub mod preferences;
 pub mod privacy;
 pub mod rendering;
 pub mod resources;
