@@ -15,8 +15,7 @@ use std::error::Error;
 use url::Url;
 use winit::event_loop::EventLoop;
 
-/// Page par défaut si aucune URL n'est fournie.
-const DEFAULT_URL: &str = "https://example.com";
+use suribrows::config::Config;
 
 fn main() -> Result<(), Box<dyn Error>> {
     // ── 0. Parse command-line flags ────────────────────────────────────
@@ -48,18 +47,21 @@ fn main() -> Result<(), Box<dyn Error>> {
         "Running in DEBUG mode — pages will load very slowly. Use `cargo run --release` for normal speed."
     );
 
-    // ── 4. Lecteur de ressources Servo ─────────────────────────────────
+    // ── 4. Load configuration ──────────────────────────────────────────
+    let config = Config::load();
+
+    // ── 5. Lecteur de ressources Servo ─────────────────────────────────
     suribrows::resources::init();
 
-    // ── 5. Parser l'URL depuis les arguments CLI ───────────────────────
-    let url = parse_url_from_args();
+    // ── 6. Parser l'URL depuis les arguments CLI ───────────────────────
+    let url = parse_url_from_args(&config.general.default_url);
 
-    // ── 6. Boucle d'événements Winit ───────────────────────────────────
+    // ── 7. Boucle d'événements Winit ───────────────────────────────────
     let event_loop = EventLoop::with_user_event()
         .build()
         .expect("Échec de la création du EventLoop Winit");
 
-    let mut app = suribrows::browser::App::new(&event_loop, url);
+    let mut app = suribrows::browser::App::new(&event_loop, url, config);
 
     Ok(event_loop.run_app(&mut app)?)
 }
@@ -67,12 +69,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// Parse le premier argument CLI comme URL.
 /// Si l'argument ne contient pas de schéma (http/https), on ajoute "https://".
 /// Ignore le flag --secure-mode.
-fn parse_url_from_args() -> Url {
+fn parse_url_from_args(default_url: &str) -> Url {
     // Filter out flags (starting with --) and get first non-flag argument
     let input = env::args()
         .skip(1) // Skip binary name
         .find(|arg| !arg.starts_with("--"))
-        .unwrap_or_else(|| DEFAULT_URL.to_string());
+        .unwrap_or_else(|| default_url.to_string());
 
     // Essaie de parser directement (fonctionne si l'utilisateur a mis le schéma)
     if let Ok(url) = Url::parse(&input) {

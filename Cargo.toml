@@ -95,6 +95,15 @@ features = [
     "Win32_System_JobObjects",
 ]
 
+# ─── Configuration ────────────────────────────────────────────────────
+# Sérialisation/désérialisation pour le système de configuration TOML.
+[dependencies.serde]
+version = "1.0"
+features = ["derive"]
+
+[dependencies.toml]
+version = "0.8"
+
 # ─── Feature flags pour l'avenir ─────────────────────────────────────────
 [features]
 default = []

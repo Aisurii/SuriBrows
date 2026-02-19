@@ -5,12 +5,25 @@
 //! - HTTPS enforcement, MIME sniff disabled
 //! - Tracking APIs disabled (geolocation, Bluetooth, WebRTC, notifications)
 //! - Generic Chrome user-agent to reduce fingerprinting
+//!
+//! All values are driven by [`crate::config::ServoConfig`] and
+//! [`crate::config::PrivacyConfig`] so users can tune them from `config.toml`.
 
+use crate::config::{PrivacyConfig, ServoConfig};
 use tracing::{info, warn};
 
-/// Builds Servo `Preferences` tuned for the current machine with privacy enhancements.
+/// Default privacy-oriented user agent (used when config UA is empty).
+const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+/// Builds Servo `Preferences` from the user's config sections.
+///
+/// `servo_cfg.layout_threads == 0` means auto-detect from CPU count.
+/// An empty `servo_cfg.user_agent` falls back to the default privacy UA.
 #[allow(clippy::field_reassign_with_default)]
-pub fn build_servo_preferences() -> servo::Preferences {
+pub fn build_servo_preferences(
+    servo_cfg: &ServoConfig,
+    privacy_cfg: &PrivacyConfig,
+) -> servo::Preferences {
     let cpus = std::thread::available_parallelism()
         .map(|n| n.get() as i64)
         .unwrap_or(4);
@@ -18,33 +31,38 @@ pub fn build_servo_preferences() -> servo::Preferences {
     let mut prefs = servo::Preferences::default();
 
     // ── Performance Tuning ────────────────────────────────────────────────
-    prefs.layout_threads = cpus.min(8);
+    prefs.layout_threads = if servo_cfg.layout_threads == 0 {
+        cpus.min(8) // auto-detect
+    } else {
+        servo_cfg.layout_threads.min(8)
+    };
     prefs.threadpools_async_runtime_workers_max = (cpus * 2).min(16);
     prefs.threadpools_image_cache_workers_max = cpus.min(8);
     prefs.threadpools_webrender_workers_max = (cpus / 2).clamp(2, 8);
     prefs.threadpools_resource_workers_max = cpus.min(8);
-    prefs.network_http_cache_size = 50_000;
-    prefs.gfx_precache_shaders = true;
+    prefs.network_http_cache_size = servo_cfg.cache_size.max(0) as u64;
+    prefs.gfx_precache_shaders = servo_cfg.precache_shaders;
 
-    // ── Privacy & Security Settings (Balanced Mode) ───────────────────────
+    // ── Privacy & Security Settings ───────────────────────────────────────
 
-    // User Agent: Generic to reduce fingerprinting surface
-    // Using standard Chrome UA without OS details
-    prefs.user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36".to_string();
+    // User Agent: use config value, or default privacy UA if empty
+    prefs.user_agent = if servo_cfg.user_agent.is_empty() {
+        DEFAULT_USER_AGENT.to_string()
+    } else {
+        servo_cfg.user_agent.clone()
+    };
 
     // Network Security
-    prefs.network_enforce_tls_enabled = true; // Force HTTPS where possible
-    prefs.network_mime_sniff = false; // Disable MIME sniffing (prevents XSS)
+    prefs.network_enforce_tls_enabled = privacy_cfg.enforce_tls;
+    prefs.network_mime_sniff = !privacy_cfg.disable_mime_sniff;
 
-    // Privacy Features - Disable Tracking APIs
-    prefs.dom_geolocation_enabled = false; // Block location tracking
-    prefs.dom_bluetooth_enabled = false; // Block Bluetooth access
-    prefs.dom_notification_enabled = false; // Block notification spam
+    // Privacy Features - Tracking APIs
+    prefs.dom_geolocation_enabled = !privacy_cfg.disable_geolocation;
+    prefs.dom_bluetooth_enabled = !privacy_cfg.disable_bluetooth;
+    prefs.dom_notification_enabled = !privacy_cfg.disable_notifications;
 
-    // SECURITY: Disable WebRTC to prevent IP leak attacks
-    // Trade-off: Breaks video calls (Zoom, Meet, Discord), P2P apps
-    // Rationale: WebRTC can reveal local/public IP even through VPN via STUN
-    prefs.dom_webrtc_enabled = false; // Block WebRTC IP leaks
+    // WebRTC: can reveal local/public IP even through VPN via STUN
+    prefs.dom_webrtc_enabled = !privacy_cfg.disable_webrtc;
 
     // Keep enabled for compatibility (balanced mode)
     // - dom_cookiestore_enabled: true (default) - needed for logins
@@ -98,52 +116,56 @@ pub fn build_servo_preferences() -> servo::Preferences {
 mod tests {
     use super::*;
 
+    fn default_prefs() -> servo::Preferences {
+        build_servo_preferences(&ServoConfig::default(), &PrivacyConfig::default())
+    }
+
     #[test]
     fn test_preferences_layout_threads_bounded() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(prefs.layout_threads >= 1, "layout_threads should be >= 1");
         assert!(prefs.layout_threads <= 8, "layout_threads should be <= 8");
     }
 
     #[test]
     fn test_preferences_tls_enforced() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(prefs.network_enforce_tls_enabled);
     }
 
     #[test]
     fn test_preferences_mime_sniff_disabled() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(!prefs.network_mime_sniff);
     }
 
     #[test]
     fn test_preferences_geolocation_disabled() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(!prefs.dom_geolocation_enabled);
     }
 
     #[test]
     fn test_preferences_bluetooth_disabled() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(!prefs.dom_bluetooth_enabled);
     }
 
     #[test]
     fn test_preferences_webrtc_disabled() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(!prefs.dom_webrtc_enabled);
     }
 
     #[test]
     fn test_preferences_notification_disabled() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(!prefs.dom_notification_enabled);
     }
 
     #[test]
     fn test_preferences_user_agent_set() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(
             prefs.user_agent.contains("Chrome"),
             "UA should contain Chrome"
@@ -153,20 +175,59 @@ mod tests {
 
     #[test]
     fn test_preferences_cache_size() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert_eq!(prefs.network_http_cache_size, 50_000);
     }
 
     #[test]
     fn test_preferences_precache_shaders() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(prefs.gfx_precache_shaders);
     }
 
     #[test]
     fn test_preferences_webrender_workers_bounded() {
-        let prefs = build_servo_preferences();
+        let prefs = default_prefs();
         assert!(prefs.threadpools_webrender_workers_max >= 2);
         assert!(prefs.threadpools_webrender_workers_max <= 8);
+    }
+
+    #[test]
+    fn test_preferences_custom_layout_threads() {
+        let servo_cfg = ServoConfig {
+            layout_threads: 4,
+            ..Default::default()
+        };
+        let prefs = build_servo_preferences(&servo_cfg, &PrivacyConfig::default());
+        assert_eq!(prefs.layout_threads, 4);
+    }
+
+    #[test]
+    fn test_preferences_custom_user_agent() {
+        let servo_cfg = ServoConfig {
+            user_agent: "MyBrowser/1.0".to_string(),
+            ..Default::default()
+        };
+        let prefs = build_servo_preferences(&servo_cfg, &PrivacyConfig::default());
+        assert_eq!(prefs.user_agent, "MyBrowser/1.0");
+    }
+
+    #[test]
+    fn test_preferences_privacy_toggles_off() {
+        let privacy_cfg = PrivacyConfig {
+            enforce_tls: false,
+            disable_mime_sniff: false,
+            disable_geolocation: false,
+            disable_bluetooth: false,
+            disable_notifications: false,
+            disable_webrtc: false,
+        };
+        let prefs = build_servo_preferences(&ServoConfig::default(), &privacy_cfg);
+        assert!(!prefs.network_enforce_tls_enabled);
+        assert!(prefs.network_mime_sniff); // sniff enabled when toggle is off
+        assert!(prefs.dom_geolocation_enabled);
+        assert!(prefs.dom_bluetooth_enabled);
+        assert!(prefs.dom_notification_enabled);
+        assert!(prefs.dom_webrtc_enabled);
     }
 }

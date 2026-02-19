@@ -7,7 +7,7 @@
 
 use url::Url;
 
-const DUCKDUCKGO_SEARCH: &str = "https://duckduckgo.com/?q=";
+const DEFAULT_SEARCH_URL: &str = "https://duckduckgo.com/?q=";
 
 /// Normalizes URL for safe display (V-8: Homograph Attack Prevention).
 ///
@@ -80,21 +80,24 @@ pub struct UrlBar {
     focus: UrlBarFocus,
     /// URL courante de la page (mise à jour par `notify_url_changed`).
     current_url: Option<Url>,
+    /// Search engine URL (query appended at the end).
+    search_url: String,
 }
 
 impl Default for UrlBar {
     fn default() -> Self {
-        Self::new()
+        Self::new(DEFAULT_SEARCH_URL.to_string())
     }
 }
 
 impl UrlBar {
-    pub fn new() -> Self {
+    pub fn new(search_url: String) -> Self {
         Self {
             text: String::new(),
             cursor: 0,
             focus: UrlBarFocus::Unfocused,
             current_url: None,
+            search_url,
         }
     }
 
@@ -238,7 +241,7 @@ impl UrlBar {
         if input.is_empty() {
             return None;
         }
-        let url = resolve_input(input);
+        let url = resolve_input(input, &self.search_url);
         self.focus = UrlBarFocus::Unfocused;
         url
     }
@@ -269,8 +272,8 @@ impl UrlBar {
 /// - Si l'entrée a déjà un schéma http(s), on l'utilise directement.
 /// - Si l'entrée contient un point et pas d'espace (ex: `wikipedia.org`),
 ///   on la traite comme une URL et on ajoute `https://`.
-/// - Sinon, on fait une recherche DuckDuckGo.
-fn resolve_input(input: &str) -> Option<Url> {
+/// - Sinon, on fait une recherche via le configured search engine.
+fn resolve_input(input: &str, search_url: &str) -> Option<Url> {
     // Déjà une URL valide avec schéma ?
     if let Ok(url) = Url::parse(input)
         && (url.scheme() == "http" || url.scheme() == "https")
@@ -286,9 +289,9 @@ fn resolve_input(input: &str) -> Option<Url> {
         return Some(url);
     }
 
-    // Recherche DuckDuckGo
+    // Search engine query
     let encoded: String = url::form_urlencoded::byte_serialize(input.as_bytes()).collect();
-    Url::parse(&format!("{DUCKDUCKGO_SEARCH}{encoded}")).ok()
+    Url::parse(&format!("{search_url}{encoded}")).ok()
 }
 
 #[cfg(test)]
@@ -368,7 +371,7 @@ mod tests {
     #[test]
     fn test_url_bar_uses_normalization() {
         // Test that UrlBar actually uses the normalization function
-        let mut urlbar = UrlBar::new();
+        let mut urlbar = UrlBar::default();
         let punycode_url = Url::parse("https://xn--ggle-0nd.com").unwrap();
 
         urlbar.set_url(&punycode_url);
@@ -383,7 +386,7 @@ mod tests {
     #[test]
     fn test_unfocus_restores_normalized_url() {
         // Test that unfocus() also uses normalization
-        let mut urlbar = UrlBar::new();
+        let mut urlbar = UrlBar::default();
         let punycode_url = Url::parse("https://xn--ggle-0nd.com/evil").unwrap();
 
         urlbar.set_url(&punycode_url);
@@ -406,16 +409,23 @@ mod tests {
     #[test]
     fn test_resolve_input_https() {
         // Test URL resolution adds https:// prefix
-        let result = resolve_input("google.com").unwrap();
+        let result = resolve_input("google.com", DEFAULT_SEARCH_URL).unwrap();
         assert_eq!(result.scheme(), "https");
         assert_eq!(result.host_str(), Some("google.com"));
     }
 
     #[test]
-    fn test_resolve_input_duckduckgo_search() {
-        // Test that plain text becomes a DuckDuckGo search
-        let result = resolve_input("hello world").unwrap();
+    fn test_resolve_input_search() {
+        // Test that plain text becomes a search query
+        let result = resolve_input("hello world", DEFAULT_SEARCH_URL).unwrap();
         assert!(result.as_str().starts_with("https://duckduckgo.com/?q="));
+        assert!(result.as_str().contains("hello"));
+    }
+
+    #[test]
+    fn test_resolve_input_custom_search_engine() {
+        let result = resolve_input("hello world", "https://google.com/search?q=").unwrap();
+        assert!(result.as_str().starts_with("https://google.com/search?q="));
         assert!(result.as_str().contains("hello"));
     }
 }

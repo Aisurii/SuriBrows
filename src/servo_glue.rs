@@ -112,7 +112,8 @@ impl WebViewDelegate for AppState {
     /// access to Rc<RefCell<>> causes a panic across the FFI boundary.
     fn notify_url_changed(&self, _webview: WebView, url: Url) {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            self.window.set_title(&format!("SuriBrows — {}", url));
+            let title = &self.config.general.window_title;
+            self.window.set_title(&format!("{title} — {url}"));
             self.urlbar.borrow_mut().set_url(&url);
             *self.current_url.borrow_mut() = Some(url.clone());
             if let Some(ref engine) = self.adblock_engine {
@@ -129,8 +130,10 @@ impl WebViewDelegate for AppState {
     /// SECURITY (V-4): Wrapped with panic safety for FFI boundary protection.
     fn notify_page_title_changed(&self, _webview: WebView, title: Option<String>) {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            if let Some(title) = title {
-                self.window.set_title(&format!("SuriBrows — {}", title));
+            if let Some(page_title) = title {
+                let app_title = &self.config.general.window_title;
+                self.window
+                    .set_title(&format!("{app_title} — {page_title}"));
             }
         }));
         // Panic recovery: prevent UB if window access causes panic
@@ -150,13 +153,37 @@ impl WebViewDelegate for AppState {
             let request = load.request();
             let url = request.url.as_str();
 
+            // ── Settings save intercept ─────────────────────────────────
+            if crate::settings::is_settings_save_url(url) {
+                if let Some(new_config) = crate::settings::parse_settings_url(url)
+                    && let Err(e) = new_config.save()
+                {
+                    warn!("Failed to save config: {e}");
+                }
+                // Cancel the network request
+                let response = WebResourceResponse::new(request.url.clone());
+                load.intercept(response).cancel();
+                // Show confirmation page
+                let html = crate::settings::generate_saved_html();
+                let encoded = crate::settings::url_encode(&html);
+                let data_url = format!("data:text/html;charset=utf-8,{encoded}");
+                if let Ok(confirm_url) = Url::parse(&data_url)
+                    && let Some(webview) = self.webviews.borrow().last()
+                {
+                    webview.load(confirm_url);
+                }
+                return;
+            }
+
             // SECURITY (V-7): Update URL bar immediately for main frame navigations
             // This reduces (but doesn't eliminate) the TOCTOU window where the displayed
             // URL doesn't match the loading content.
             if request.is_for_main_frame {
                 // Optimistically update URL bar before the page loads
                 self.urlbar.borrow_mut().set_url(&request.url);
-                self.window.set_title(&format!("Loading — {}", request.url));
+                let title = &self.config.general.window_title;
+                self.window
+                    .set_title(&format!("{title} — Loading — {}", request.url));
             }
 
             // Ad-blocking logic

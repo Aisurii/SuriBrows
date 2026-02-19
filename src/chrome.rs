@@ -9,23 +9,10 @@ use std::sync::Arc;
 
 use glow::HasContext;
 
-/// Hauteur du chrome en pixels physiques.
+/// Hauteur du chrome en pixels physiques (default value, used by tests).
 pub const CHROME_HEIGHT: u32 = 40;
 
-const FONT_SIZE: f32 = 16.0;
 const FONT_BYTES: &[u8] = include_bytes!("../resources/fonts/Inter-Regular.ttf");
-
-// Couleurs
-const BG_COLOR: [f32; 4] = [0.17, 0.17, 0.17, 1.0]; // #2b2b2b
-const BG_FOCUSED_COLOR: [f32; 4] = [0.23, 0.23, 0.23, 1.0]; // #3b3b3b
-const TEXT_COLOR: [f32; 4] = [0.93, 0.93, 0.93, 1.0]; // #ededed
-const CURSOR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 1.0]; // white
-const BAR_BG_COLOR: [f32; 4] = [0.13, 0.13, 0.13, 1.0]; // #222222 — input field bg
-const BAR_BORDER_COLOR: [f32; 4] = [0.3, 0.3, 0.3, 1.0]; // #4d4d4d
-
-const TEXT_LEFT_PAD: f32 = 12.0;
-const BAR_MARGIN: f32 = 6.0;
-const BAR_H_PAD: f32 = 8.0;
 
 /// Vertex shader GLES 300 es.
 const VERTEX_SHADER: &str = r#"#version 300 es
@@ -85,13 +72,13 @@ struct GlyphAtlas {
 }
 
 impl GlyphAtlas {
-    fn build(font: &fontdue::Font) -> Self {
+    fn build(font: &fontdue::Font, font_size: f32) -> Self {
         let chars: Vec<char> = (32u8..=126).map(|b| b as char).collect();
 
         // Premier passage : rastériser tous les glyphes pour calculer la taille
         let mut rasterized: Vec<(char, fontdue::Metrics, Vec<u8>)> = Vec::new();
         for &c in &chars {
-            let (metrics, bitmap) = font.rasterize(c, FONT_SIZE);
+            let (metrics, bitmap) = font.rasterize(c, font_size);
             rasterized.push((c, metrics, bitmap));
         }
 
@@ -176,6 +163,18 @@ pub struct ChromeRenderer {
     u_color: glow::UniformLocation,
     u_use_texture: glow::UniformLocation,
     u_texture: glow::UniformLocation,
+    // Runtime theme values (from config)
+    bg_color: [f32; 4],
+    bg_focused_color: [f32; 4],
+    text_color: [f32; 4],
+    cursor_color: [f32; 4],
+    bar_bg_color: [f32; 4],
+    bar_border_color: [f32; 4],
+    text_left_pad: f32,
+    bar_margin: f32,
+    bar_h_pad: f32,
+    chrome_height: u32,
+    font_size: f32,
 }
 
 #[allow(unsafe_op_in_unsafe_fn)]
@@ -184,7 +183,7 @@ impl ChromeRenderer {
     ///
     /// # Safety
     /// Appelle des fonctions OpenGL.
-    pub unsafe fn new(gl: Arc<glow::Context>) -> Self {
+    pub unsafe fn new(gl: Arc<glow::Context>, config: &crate::config::ChromeConfig) -> Self {
         // ── Compiler les shaders ─────────────────────────────────────────
         let vs = gl.create_shader(glow::VERTEX_SHADER).unwrap();
         gl.shader_source(vs, VERTEX_SHADER);
@@ -244,7 +243,7 @@ impl ChromeRenderer {
         let font = fontdue::Font::from_bytes(FONT_BYTES, fontdue::FontSettings::default())
             .expect("Impossible de charger la police Inter");
 
-        let atlas = GlyphAtlas::build(&font);
+        let atlas = GlyphAtlas::build(&font, config.font_size);
 
         let atlas_texture = gl.create_texture().unwrap();
         gl.bind_texture(glow::TEXTURE_2D, Some(atlas_texture));
@@ -292,6 +291,17 @@ impl ChromeRenderer {
             u_color,
             u_use_texture,
             u_texture,
+            bg_color: config.colors.background,
+            bg_focused_color: config.colors.background_focused,
+            text_color: config.colors.text,
+            cursor_color: config.colors.cursor,
+            bar_bg_color: config.colors.bar_background,
+            bar_border_color: config.colors.bar_border,
+            text_left_pad: config.text_left_pad,
+            bar_margin: config.bar_margin,
+            bar_h_pad: config.bar_h_pad,
+            chrome_height: config.height,
+            font_size: config.font_size,
         }
     }
 
@@ -310,7 +320,7 @@ impl ChromeRenderer {
         let gl = &self.gl;
         let w = window_width as f32;
         let h = window_height as f32;
-        let ch = CHROME_HEIGHT as f32;
+        let ch = self.chrome_height as f32;
 
         // ── Sauvegarder l'état GL ────────────────────────────────────────
         let prev_blend = gl.is_enabled(glow::BLEND);
@@ -344,39 +354,39 @@ impl ChromeRenderer {
 
         // ── 1. Fond du chrome ────────────────────────────────────────────
         let bg = if is_focused {
-            BG_FOCUSED_COLOR
+            self.bg_focused_color
         } else {
-            BG_COLOR
+            self.bg_color
         };
         self.draw_rect(0.0, 0.0, w, ch, bg);
 
         // ── 2. Barre de saisie (input field) ─────────────────────────────
-        let bar_x = BAR_MARGIN;
-        let bar_y = BAR_MARGIN;
-        let bar_w = w - BAR_MARGIN * 2.0;
-        let bar_h = ch - BAR_MARGIN * 2.0;
+        let bar_x = self.bar_margin;
+        let bar_y = self.bar_margin;
+        let bar_w = w - self.bar_margin * 2.0;
+        let bar_h = ch - self.bar_margin * 2.0;
 
         // Bordure
-        self.draw_rect(bar_x, bar_y, bar_w, bar_h, BAR_BORDER_COLOR);
+        self.draw_rect(bar_x, bar_y, bar_w, bar_h, self.bar_border_color);
         // Fond intérieur
         self.draw_rect(
             bar_x + 1.0,
             bar_y + 1.0,
             bar_w - 2.0,
             bar_h - 2.0,
-            BAR_BG_COLOR,
+            self.bar_bg_color,
         );
 
         // ── 3. Texte de l'URL ────────────────────────────────────────────
-        let text_x = bar_x + BAR_H_PAD + TEXT_LEFT_PAD;
+        let text_x = bar_x + self.bar_h_pad + self.text_left_pad;
         // Centrer verticalement : baseline ≈ milieu du chrome
-        let text_baseline_y = ch / 2.0 + FONT_SIZE / 3.0;
+        let text_baseline_y = ch / 2.0 + self.font_size / 3.0;
 
         gl.active_texture(glow::TEXTURE0);
         gl.bind_texture(glow::TEXTURE_2D, Some(self.atlas_texture));
 
         let mut pen_x = text_x;
-        let max_text_x = bar_x + bar_w - BAR_H_PAD;
+        let max_text_x = bar_x + bar_w - self.bar_h_pad;
         let mut cursor_x: Option<f32> = None;
 
         // Si le curseur est au début
@@ -413,7 +423,7 @@ impl ChromeRenderer {
                 if let Some(space) = self.atlas.glyphs.get(&' ') {
                     pen_x += space.advance_x;
                 } else {
-                    pen_x += FONT_SIZE * 0.5;
+                    pen_x += self.font_size * 0.5;
                 }
             }
 
@@ -425,9 +435,9 @@ impl ChromeRenderer {
 
         // ── 4. Curseur (si focusé) ───────────────────────────────────────
         if is_focused && let Some(cx) = cursor_x {
-            let cursor_h = FONT_SIZE + 4.0;
+            let cursor_h = self.font_size + 4.0;
             let cursor_y = (ch - cursor_h) / 2.0;
-            self.draw_rect(cx, cursor_y, 2.0, cursor_h, CURSOR_COLOR);
+            self.draw_rect(cx, cursor_y, 2.0, cursor_h, self.cursor_color);
         }
 
         // ── Restaurer l'état GL ──────────────────────────────────────────
@@ -487,7 +497,7 @@ impl ChromeRenderer {
     ) {
         let gl = &self.gl;
         gl.uniform_1_i32(Some(&self.u_use_texture), 1);
-        gl.uniform_4_f32_slice(Some(&self.u_color), &TEXT_COLOR);
+        gl.uniform_4_f32_slice(Some(&self.u_color), &self.text_color);
 
         let aw = self.atlas.width as f32;
         let ah = self.atlas.height as f32;
@@ -528,7 +538,7 @@ mod tests {
     fn build_test_atlas() -> GlyphAtlas {
         let font = fontdue::Font::from_bytes(FONT_BYTES, fontdue::FontSettings::default())
             .expect("Failed to load Inter font");
-        GlyphAtlas::build(&font)
+        GlyphAtlas::build(&font, 16.0)
     }
 
     #[test]

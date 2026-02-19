@@ -61,10 +61,12 @@ use winit::keyboard::{Key, NamedKey};
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::window::Window;
 
-use crate::chrome::{self, ChromeRenderer};
+use crate::chrome::ChromeRenderer;
+use crate::config::Config;
 use crate::preferences::build_servo_preferences;
 use crate::rendering;
 use crate::servo_glue::{Waker, WakerEvent};
+use crate::settings;
 use crate::urlbar::UrlBar;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,6 +114,9 @@ pub struct AppState {
 
     /// Renderer GL pour le chrome (barre d'URL).
     pub chrome: RefCell<ChromeRenderer>,
+
+    /// Configuration de l'application.
+    pub config: Config,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,9 +124,14 @@ pub struct AppState {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Application à deux phases de vie.
+#[allow(clippy::large_enum_variant)]
 pub enum App {
     /// Phase pré-initialisation : on attend que Winit appelle `resumed()`.
-    Initial { waker: Waker, initial_url: Url },
+    Initial {
+        waker: Waker,
+        initial_url: Url,
+        config: Config,
+    },
 
     /// Phase opérationnelle : le navigateur est actif.
     Running(Rc<AppState>),
@@ -129,19 +139,20 @@ pub enum App {
 
 impl App {
     /// Crée l'application dans son état initial avec l'URL à charger.
-    pub fn new(event_loop: &EventLoop<WakerEvent>, initial_url: Url) -> Self {
+    pub fn new(event_loop: &EventLoop<WakerEvent>, initial_url: Url, config: Config) -> Self {
         Self::Initial {
             waker: Waker::new(event_loop),
             initial_url,
+            config,
         }
     }
 }
 
 /// Calcule la taille du webview (fenêtre moins le chrome).
-fn webview_size(window_size: PhysicalSize<u32>) -> PhysicalSize<u32> {
+fn webview_size(window_size: PhysicalSize<u32>, chrome_height: u32) -> PhysicalSize<u32> {
     PhysicalSize::new(
         window_size.width,
-        window_size.height.saturating_sub(chrome::CHROME_HEIGHT),
+        window_size.height.saturating_sub(chrome_height),
     )
 }
 
@@ -152,8 +163,12 @@ fn webview_size(window_size: PhysicalSize<u32>) -> PhysicalSize<u32> {
 impl ApplicationHandler<WakerEvent> for App {
     /// Appelé une fois par Winit quand l'application est prête à créer des fenêtres.
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let (waker, initial_url) = match self {
-            Self::Initial { waker, initial_url } => (waker.clone(), initial_url.clone()),
+        let (waker, initial_url, config) = match self {
+            Self::Initial {
+                waker,
+                initial_url,
+                config,
+            } => (waker.clone(), initial_url.clone(), config.clone()),
             Self::Running(_) => return,
         };
 
@@ -163,8 +178,11 @@ impl ApplicationHandler<WakerEvent> for App {
             .expect("Impossible d'obtenir le DisplayHandle");
 
         let window_attributes = Window::default_attributes()
-            .with_title("SuriBrows")
-            .with_inner_size(winit::dpi::LogicalSize::new(1280.0, 800.0));
+            .with_title(&config.general.window_title)
+            .with_inner_size(winit::dpi::LogicalSize::new(
+                config.window.width as f64,
+                config.window.height as f64,
+            ));
 
         let window = event_loop
             .create_window(window_attributes)
@@ -181,16 +199,16 @@ impl ApplicationHandler<WakerEvent> for App {
 
         // Contexte offscreen (FBO) — Servo peint dedans.
         let inner_size = window.inner_size();
-        let wv_size = webview_size(inner_size);
+        let wv_size = webview_size(inner_size, config.chrome.height);
         let offscreen_context = Rc::new(window_rendering_context.offscreen_context(wv_size));
 
         // ── 3. Initialiser le chrome renderer ───────────────────────────
         let gl = window_rendering_context.glow_gl_api();
-        let chrome_renderer = unsafe { ChromeRenderer::new(gl) };
+        let chrome_renderer = unsafe { ChromeRenderer::new(gl, &config.chrome) };
 
         // ── 4. Construire l'instance Servo ──────────────────────────────
         let servo = ServoBuilder::default()
-            .preferences(build_servo_preferences())
+            .preferences(build_servo_preferences(&config.servo, &config.privacy))
             .event_loop_waker(Box::new(waker))
             .build();
 
@@ -206,8 +224,9 @@ impl ApplicationHandler<WakerEvent> for App {
             modifiers: Cell::new(winit::keyboard::ModifiersState::default()),
             adblock_engine,
             current_url: RefCell::new(None),
-            urlbar: RefCell::new(UrlBar::new()),
+            urlbar: RefCell::new(UrlBar::new(config.search.engine_url.clone())),
             chrome: RefCell::new(chrome_renderer),
+            config,
         });
 
         // ── 6. Créer la WebView initiale ────────────────────────────────
@@ -248,7 +267,11 @@ impl ApplicationHandler<WakerEvent> for App {
             state.servo.spin_event_loop();
         }
 
-        let chrome_h = chrome::CHROME_HEIGHT as f32;
+        let chrome_h = if let Self::Running(state) = self {
+            state.config.chrome.height as f32
+        } else {
+            40.0
+        };
 
         match event {
             // ── Fermeture de la fenêtre ────────────────────────────────
@@ -277,7 +300,7 @@ impl ApplicationHandler<WakerEvent> for App {
                             euclid::default::Point2D::new(0, 0),
                             euclid::default::Size2D::new(
                                 inner_size.width as i32,
-                                inner_size.height.saturating_sub(chrome::CHROME_HEIGHT) as i32,
+                                inner_size.height.saturating_sub(state.config.chrome.height) as i32,
                             ),
                         );
                         blit(&gl, target_rect);
@@ -342,7 +365,7 @@ impl ApplicationHandler<WakerEvent> for App {
                     // Redimensionner le contexte fenêtre
                     state.window_rendering_context.resize(new_size);
                     // Redimensionner le FBO offscreen (zone webview)
-                    let wv_size = webview_size(new_size);
+                    let wv_size = webview_size(new_size, state.config.chrome.height);
                     state.offscreen_context.resize(wv_size);
                 }
             }
@@ -447,6 +470,22 @@ impl ApplicationHandler<WakerEvent> for App {
                         {
                             state.urlbar.borrow_mut().focus();
                             state.window.request_redraw();
+                            return;
+                        }
+
+                        // Ctrl+, : open settings
+                        if mods.control_key()
+                            && let Key::Character(ref c) = event.logical_key
+                            && c.as_str() == ","
+                        {
+                            let html = settings::generate_settings_html(&state.config);
+                            let encoded = settings::url_encode(&html);
+                            let data_url = format!("data:text/html;charset=utf-8,{encoded}");
+                            if let Ok(url) = Url::parse(&data_url)
+                                && let Some(webview) = state.webviews.borrow().last()
+                            {
+                                webview.load(url);
+                            }
                             return;
                         }
 
@@ -558,41 +597,47 @@ impl ApplicationHandler<WakerEvent> for App {
 mod tests {
     use super::*;
 
+    const TEST_CHROME_HEIGHT: u32 = 40;
+
     // ── webview_size ──────────────────────────────────────────────────
 
     #[test]
     fn test_webview_size_subtracts_chrome_height() {
-        let result = webview_size(PhysicalSize::new(1280, 800));
+        let result = webview_size(PhysicalSize::new(1280, 800), TEST_CHROME_HEIGHT);
         assert_eq!(result, PhysicalSize::new(1280, 760));
     }
 
     #[test]
     fn test_webview_size_preserves_width() {
-        let result = webview_size(PhysicalSize::new(1920, 1080));
+        let result = webview_size(PhysicalSize::new(1920, 1080), TEST_CHROME_HEIGHT);
         assert_eq!(result.width, 1920);
     }
 
     #[test]
     fn test_webview_size_saturates_at_zero() {
-        // Height 20 < CHROME_HEIGHT 40, saturating_sub gives 0
-        let result = webview_size(PhysicalSize::new(100, 20));
+        // Height 20 < chrome_height 40, saturating_sub gives 0
+        let result = webview_size(PhysicalSize::new(100, 20), TEST_CHROME_HEIGHT);
         assert_eq!(result, PhysicalSize::new(100, 0));
     }
 
     #[test]
     fn test_webview_size_exact_chrome_height() {
-        let result = webview_size(PhysicalSize::new(100, chrome::CHROME_HEIGHT));
+        let result = webview_size(
+            PhysicalSize::new(100, TEST_CHROME_HEIGHT),
+            TEST_CHROME_HEIGHT,
+        );
         assert_eq!(result, PhysicalSize::new(100, 0));
     }
 
     #[test]
     fn test_webview_size_zero() {
-        let result = webview_size(PhysicalSize::new(0, 0));
+        let result = webview_size(PhysicalSize::new(0, 0), TEST_CHROME_HEIGHT);
         assert_eq!(result, PhysicalSize::new(0, 0));
     }
 
     #[test]
-    fn test_preferences_chrome_height_is_40() {
-        assert_eq!(chrome::CHROME_HEIGHT, 40);
+    fn test_default_config_chrome_height_is_40() {
+        let config = Config::default();
+        assert_eq!(config.chrome.height, 40);
     }
 }
