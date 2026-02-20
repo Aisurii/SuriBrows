@@ -29,6 +29,8 @@ use std::mem::size_of;
 #[cfg(target_os = "windows")]
 use std::ptr::null_mut;
 
+use tracing::{info, warn};
+
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Foundation::GetLastError;
 #[cfg(target_os = "windows")]
@@ -97,26 +99,24 @@ pub fn apply_process_mitigations(enable_acg: bool) {
 
         // Always-on policies (safe, no compatibility issues)
         if let Err(e) = create_job_object_jail() {
-            eprintln!("⚠️  Failed to create Job Object: {}", e);
+            warn!("Failed to create Job Object: {}", e);
         }
 
         if let Err(e) = apply_image_load_policy() {
-            eprintln!("⚠️  Failed to apply image load policy: {}", e);
+            warn!("Failed to apply image load policy: {}", e);
         }
 
         // Conditional ACG (DISABLED until Servo supports JIT control)
         // SECURITY FIX (V-1): ACG + JIT = guaranteed crash
         if enable_acg {
-            eprintln!("⚠️  WARNING: --secure-mode requested but ACG disabled");
-            eprintln!("    Reason: Servo doesn't expose JavaScript JIT disable API");
-            eprintln!("    ACG + JIT = guaranteed crash on JavaScript execution");
-            eprintln!("    Issue: Servo lacks js.jit.content preference");
-            eprintln!("    Alternative: Use Job Object + Image Load policies (already active)");
+            warn!("--secure-mode requested but ACG disabled: Servo lacks JIT disable API");
+            warn!("ACG + JIT = guaranteed crash on JavaScript execution");
+            warn!("Alternative: Job Object + Image Load policies (already active)");
             // DO NOT CALL: apply_dynamic_code_policy() - causes immediate crash
         }
 
-        eprintln!(
-            "✓ Process mitigation policies applied (ACG={}, took {:?})",
+        info!(
+            "Process mitigation policies applied (ACG={}, took {:?})",
             enable_acg,
             start_time.elapsed()
         );
@@ -208,7 +208,7 @@ fn create_job_object_jail() -> Result<(), String> {
     // Using let _ instead of std::mem::forget since HANDLE is Copy
     let _ = job_handle;
 
-    eprintln!("✓ Job Object created (child process spawning blocked)");
+    info!("Job Object created (child process spawning blocked)");
     Ok(())
 }
 
@@ -256,7 +256,7 @@ fn apply_dynamic_code_policy() -> Result<(), String> {
         ));
     }
 
-    eprintln!("✓ Dynamic code policy applied (no JIT RWX pages)");
+    info!("Dynamic code policy applied (no JIT RWX pages)");
     Ok(())
 }
 
@@ -304,7 +304,7 @@ fn apply_image_load_policy() -> Result<(), String> {
         ));
     }
 
-    eprintln!("✓ Image load policy applied (no remote DLLs)");
+    info!("Image load policy applied (no remote DLLs)");
     Ok(())
 }
 

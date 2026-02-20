@@ -22,22 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     let secure_mode = args.contains(&"--secure-mode".to_string());
 
-    if secure_mode {
-        eprintln!("⚠️  SECURE MODE ENABLED");
-        eprintln!("    JavaScript JIT will be disabled (2-5x slower JS execution)");
-        eprintln!("    Arbitrary Code Guard (ACG) will be enabled (blocks shellcode)");
-        eprintln!();
-    }
-
-    // ── 1. Windows Security Hardening (BEFORE any DLLs load) ──────────
-    suribrows::security::apply_process_mitigations(secure_mode);
-
-    // ── 2. Provider crypto TLS ─────────────────────────────────────────
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("Échec de l'installation du provider crypto rustls");
-
-    // ── 3. Logging / Tracing ───────────────────────────────────────────
+    // ── 1. Logging / Tracing (init early so all modules can use it) ───
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -46,6 +31,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     tracing::warn!(
         "Running in DEBUG mode — pages will load very slowly. Use `cargo run --release` for normal speed."
     );
+
+    if secure_mode {
+        tracing::warn!("SECURE MODE ENABLED");
+        tracing::warn!("  JavaScript JIT will be disabled (2-5x slower JS execution)");
+        tracing::warn!("  Arbitrary Code Guard (ACG) will be enabled (blocks shellcode)");
+    }
+
+    // ── 2. Windows Security Hardening (BEFORE any DLLs load) ──────────
+    suribrows::security::apply_process_mitigations(secure_mode);
+
+    // ── 3. Provider crypto TLS ─────────────────────────────────────────
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Échec de l'installation du provider crypto rustls");
 
     // ── 4. Load configuration ──────────────────────────────────────────
     let config = Config::load();
